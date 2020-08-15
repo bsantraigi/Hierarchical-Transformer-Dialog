@@ -14,12 +14,10 @@ from collections import Counter
 import logging
 from nltk.util import ngrams
 import re, json, tqdm
-# from ..init import xavier_uniform_
+
 # import spacy
-#from matplotlib.lines import Line2D
 # import matplotlib.pyplot as plt
 
-# In[4]:
 from dataset import *
 from utils import *
 from model import *
@@ -47,7 +45,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-embed", "--embedding_size", default=100,help = "Give embedding size")
 parser.add_argument("-heads", "--nhead", default=4,  help = "Give number of heads")
 parser.add_argument("-hid", "--nhid", default=100,  help = "Give hidden size")
-parser.add_argument("-l", "--nlayers", default=3,  help = "Give number of layers")
+
+parser.add_argument("-l_e1", "--nlayers_e1", default=3,  help = "Give number of layers for Encoder 1")
+parser.add_argument("-l_e2", "--nlayers_e2", default=3,  help = "Give number of layers for Encoder 2")
+parser.add_argument("-l_d", "--nlayers_d", default=3,  help = "Give number of layers for Decoder")
+
 parser.add_argument("-d", "--dropout",default=0.2, help = "Give dropout")
 parser.add_argument("-bs", "--batch_size", default=16, help = "Give batch size")
 parser.add_argument("-e", "--epochs", default=50, help = "Give number of epochs")
@@ -61,6 +63,13 @@ elif args.model_type=="HIER":
 	log_path ='running/transformer_hier/'
 elif args.model_type=="MAT":
 	log_path ='running/transformer_mat/'
+elif args.model_type=="SET++":
+	log_path ='running/transformer_set++/'
+elif args.model_type=="HIER++":
+	log_path ='running/transformer_hier++/'
+else:
+	print('Invalid model type')
+	raise ValueError
 
 if not os.path.isdir(log_path[:-1]):
 	os.makedirs(log_path[:-1])
@@ -141,7 +150,6 @@ def train_epoch(model, epoch, batch_size): # losses per batch
 	logger.debug('==> Epoch {}, Train \tLoss: {:0.4f}\tTime taken: {:0.1f}s'.format(epoch,  total_loss, elapsed))
 	return total_loss
 
-# In[67]:
 
 
 
@@ -335,7 +343,6 @@ def training(model, best_val_loss_ground):
 	return best_model
 
 
-# In[38]:
 
 
 def save_model(model, name, val_loss=0):
@@ -345,7 +352,9 @@ def save_model(model, name, val_loss=0):
 					'emsize': args.embedding_size,
 					'nhead':args.nhead,
 					'nhid': args.nhid,
-					'nlayers': args.nlayers,
+					'nlayers_e1': args.nlayers_e1,
+					'nlayers_e2': args.nlayers_e2,
+					'nlayers_d': args.nlayers_d,
 					'dropout': args.dropout,
 					'val_loss':val_loss
 				 }
@@ -387,8 +396,6 @@ def load_model(model, checkpoint='checkpoint.pt'):
 		print('No model to load')
 
 
-# In[40]:
-
 
 def name_to_dataset(split):
 	if split=='train':
@@ -400,7 +407,6 @@ def name_to_dataset(split):
 	print('Error')
 
 
-# In[41]:
 
 
 def testing(model, split):
@@ -432,8 +438,11 @@ ntokens=len(wordtoidx)
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
 
+if args.model_type in ['SET', 'HIER', 'MAT']:
+	model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
+elif args.model_type  in ['SET++', 'HIER++']:
+	model = Transformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
 
-model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers, args.dropout, args.model_type).to(device)
 criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 seed = 123
