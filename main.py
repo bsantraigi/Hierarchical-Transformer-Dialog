@@ -430,10 +430,8 @@ ntokens=len(wordtoidx)
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
 
-if args.model_type in ['SET', 'HIER', 'MAT']:
-	model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
-elif args.model_type  in ['SET++', 'HIER++']:
-	model = Transformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
+
+model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
 
 criterion = nn.CrossEntropyLoss(ignore_index=0)
 

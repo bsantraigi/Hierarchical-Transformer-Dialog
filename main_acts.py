@@ -23,7 +23,7 @@ from metrics import *
 from collections import OrderedDict
 from evaluate import evaluateModel
 import Constants
-
+import argparse
 
 if not os.path.isdir('running'):
 	os.makedirs('running')
@@ -182,11 +182,11 @@ def evaluate(model, dataset, dataset_counter, dataset_act_vecs, batch_size, spli
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 			else: # beam search
 				if i==0:
-				hyp = [torch.tensor(l) for l in output]
-				ref = targets.transpose(0,1)
-			else:
-				hyp.extend([torch.tensor(l) for l in output])
-				ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
+					hyp = [torch.tensor(l) for l in output]
+					ref = targets.transpose(0,1)
+				else:
+					hyp.extend([torch.tensor(l) for l in output])
+					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
 
 		# calculation for bleu scores of different context lengths
@@ -271,12 +271,12 @@ def training(model):
 	logger.debug('Best bleu: {:0.4f}, Best criteria: {}'.format(best_val_bleu, criteria))
 	logger.debug('====> STARTING TRAINING NOW')
 
-	for epoch in range(0 , epochs + 1):
+	for epoch in range(1, args.epochs + 1):
 
 		epoch_start_time = time.time()
-		train_loss = train_epoch(model, epoch, batch_size)
+		train_loss = train_epoch(model, epoch, args.batch_size)
 
-		val_loss_ground = get_loss_nograd(model, epoch, batch_size, 'val')
+		val_loss_ground = get_loss_nograd(model, epoch, args.batch_size, 'val')
 
 		train_losses.append(train_loss)
 		val_losses.append(val_loss_ground)
@@ -297,7 +297,7 @@ def training(model):
 	#		save_model(model, 'checkpoint.pt',train_loss, val_loss_ground, -1)
 	#		continue
 
-		_, val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, val_hierarchial_actvecs, batch_size, 'val', method='greedy')
+		_, val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, val_hierarchial_actvecs, args.batch_size, 'val', method='greedy')
 		
 		val_bleus.append(val_bleu)
 
@@ -323,11 +323,13 @@ def save_model(model, name, train_loss, val_loss, val_bleu):
 	checkpoint = {
 					'model': model.state_dict(),
 					'optim': optimizer.state_dict(),
-					'emsize': emsize,
-					'nhead':nhead,
-					'nhid': nhid,
-					'nlayers': nlayers,
-					'dropout': dropout
+					'embedding_size': args.embedding_size,
+					'nhead':args.nhead,
+					'nhid': args.nhid,
+					'nlayers_e1': args.nlayers_e1,
+					'nlayers_e2': args.nlayers_e2,
+					'nlayers_d': args.nlayers_d,
+					'dropout': args.dropout
 				 }
 	if train_loss!=-1:
 		checkpoint['train_loss']=train_loss
@@ -366,7 +368,7 @@ def load_model(model, checkpoint='checkpoint.pt'):
 			if(checkpoint.get('val_loss')):
 				best_val_loss_ground = checkpoint['val_loss']
 		#	else:
-		#		best_val_loss_ground= get_loss_nograd(model, 0, batch_size, 'val')
+		#		best_val_loss_ground= get_loss_nograd(model, 0, args.batch_size, 'val')
 
 			if(checkpoint.get('val_bleu')):
 				best_val_bleu = checkpoint.get('val_bleu')
@@ -396,9 +398,9 @@ def name_to_dataset(split):
 def testing(model, split, method):
 	data, dataset_counter, dataset_act_vecs = name_to_dataset(split)
 	if method =='greedy':
-		test_loss, test_bleu, test_f1entity, _, _ = evaluate(model, data,dataset_counter, dataset_act_vecs, batch_size, split, method='greedy')
+		test_loss, test_bleu, test_f1entity, _, _ = evaluate(model, data,dataset_counter, dataset_act_vecs, args.batch_size, split, method='greedy')
 	elif method=='beam':
-		test_loss, test_bleu, test_f1entity, _, _ = evaluate(model, data, dataset_counter, dataset_act_vecs , batch_size, split, method='beam')
+		test_loss, test_bleu, test_f1entity, _, _ = evaluate(model, data, dataset_counter, dataset_act_vecs , args.batch_size, split, method='beam')
 
 
 # train, val, test, train_counter, val_counter, test_counter = make_datasets(load=True)
@@ -429,7 +431,7 @@ BLEU_calc = BLEUScorer()
 F1_calc = F1Scorer()
 
 
-model = Transformer(ntokens, emsize, nhead, nhid, nlayers, src_mask, src_mask_sent, tgt_mask, dropout).to(device)
+model = Transformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
 criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 seed = 123
@@ -455,12 +457,13 @@ logger.debug('\n\nStarting now\n')
 best_val_loss_ground = float("inf")
 best_val_bleu = -float("inf")
 criteria = -float("inf")
-best_val_loss_ground = load_model(model, 'checkpoint_saved.pt')
+
+# best_val_loss_ground = load_model(model, 'checkpoint_saved.pt')
 
 val, val_counter, val_hierarchial_actvecs, val_dialog_files = gen_dataset_with_acts('val')
 
-_, best_val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, val_hierarchial_actvecs, batch_size, 'val', method='greedy')
-criteria = best_val_bleu + 0.5 *(matches+successes)
+# _, best_val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, val_hierarchial_actvecs, args.batch_size, 'val', method='greedy')
+# criteria = best_val_bleu + 0.5 *(matches+successes)
 
 print('\n\n\n=====>\n')
 

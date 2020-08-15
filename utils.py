@@ -153,7 +153,7 @@ def data_loader_acts(dataset, dataset_counter, act_vecs, batch_size, wordtoidx):
     #        continue
         for i in range(prev, prev+val, batch_size):
 #             print(i, min(batch_size, prev+val-i))
-            yield data_gen(dataset, act_vecs, min(batch_size, prev+val-i), i, wordtoidx)
+            yield data_gen_acts(dataset, act_vecs, min(batch_size, prev+val-i), i, wordtoidx)
         prev += val
 
 

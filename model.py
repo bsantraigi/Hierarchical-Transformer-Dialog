@@ -110,10 +110,10 @@ class Transformer(nn.Module):
 		from torch.nn import TransformerEncoder, TransformerEncoderLayer, TransformerDecoder, TransformerDecoderLayer
 		
 		encoder_layers1 = TransformerEncoderLayer(ninp, nhead, nhid, dropout) ## sizes
-		self.transformer_encoder=TransformerEncoder(encoder_layers, nlayers_e1)
+		self.transformer_encoder=TransformerEncoder(encoder_layers1, nlayers_e1)
 
 		encoder_layers2 = TransformerEncoderLayer(ninp, nhead, nhid, dropout, activation='relu')
-		self.transformer_encoder_sent = TransformerEncoder(encoder_layers1, nlayers_e2)
+		self.transformer_encoder_sent = TransformerEncoder(encoder_layers2, nlayers_e2)
 		
 		decoder_layers = TransformerDecoderLayer(ninp, nhead, nhid, dropout, activation='relu')
 		self.transformer_decoder = TransformerDecoder(decoder_layers, nlayers_d)
@@ -178,7 +178,7 @@ class Transformer(nn.Module):
 		src = self.pos_encoder(src)
 
 		# encoder 1
-		if self.ablation=='SET' || self.ablation=='HIER':
+		if self.ablation=='SET' or self.ablation=='HIER':
 			memory_inter = self.transformer_encoder(src, src_mask, src_pad_mask)
 		elif self.ablation=='MAT':
 			memory_inter = src
@@ -321,14 +321,14 @@ class Transformer(nn.Module):
 class Transformer_acts(nn.Module):
 	def __init__(self, ntoken, ninp, nhead, nhid, nlayers_e1, nlayers_e2, nlayers_d, dropout, ablation):
 		# ninp is embed_size
-		super(Transformer, self).__init__()
+		super(Transformer_acts, self).__init__()
 		from torch.nn import TransformerEncoder, TransformerEncoderLayer, TransformerDecoder, TransformerDecoderLayer
 		
 		encoder_layers1 = TransformerEncoderLayer(ninp, nhead, nhid, dropout) ## sizes
-		self.transformer_encoder=TransformerEncoder(encoder_layers, nlayers_e1)
+		self.transformer_encoder=TransformerEncoder(encoder_layers1, nlayers_e1)
 
 		encoder_layers2 = TransformerEncoderLayer(ninp, nhead, nhid, dropout, activation='relu')
-		self.transformer_encoder_sent = TransformerEncoder(encoder_layers1, nlayers_e2)
+		self.transformer_encoder_sent = TransformerEncoder(encoder_layers2, nlayers_e2)
 		
 		decoder_layers = TransformerDecoderLayer(ninp, nhead, nhid, dropout, activation='relu')
 		self.transformer_decoder = TransformerDecoder(decoder_layers, nlayers_d)
