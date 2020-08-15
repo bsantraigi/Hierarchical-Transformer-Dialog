@@ -291,7 +291,7 @@ def training(model, best_val_loss_ground):
 		epoch_start_time = time.time()
 		train_loss = train_epoch(model, epoch, args.batch_size)
 
-		val_loss_ground = get_loss_nograd(model, epoch, batch_size, 'val')
+		val_loss_ground = get_loss_nograd(model, epoch, args.batch_size, 'val')
 
 		train_losses.append(train_loss)
 		val_losses.append(val_loss_ground)
