@@ -31,15 +31,7 @@ import argparse
 if not os.path.isdir('running'):
 	os.makedirs('running')
 
-# emsize = 100  # embedding dimension
-# nhead= 4  # Number of heads in multi-headed attention
-# nhid = 100 # number of hidden states in feedforward network model in nn.TransformerEncoder
-# nlayers = 3 #number of nn.TranfomerEncoderLayer in nn.TransformerEncoder
-# dropout= 0.2
-# batch_size = 16
-# epochs = 80 # The number of epochs
 
-# Initialize parser 
 parser = argparse.ArgumentParser() 
 
 parser.add_argument("-embed", "--embedding_size", default=100,help = "Give embedding size")
