@@ -391,18 +391,18 @@ def load_model(model, checkpoint='checkpoint.pt'):
 
 def name_to_dataset(split):
 	if split=='train':
-		return train, train_counter
+		return train, train_counter, train_dialog_files
 	if split=='val':
-		return val, val_counter
+		return val, val_counter, val_dialog_files
 	if split=='test':
-		return test, test_counter
+		return test, test_counter, test_dialog_files
 	print('Error')
 
 
 
 
 def testing(model, split):
-	data, dataset_counter = name_to_dataset(split)
+	data, dataset_counter, _ = name_to_dataset(split)
 	test_loss, test_bleu, test_f1entity = evaluate(model, data, dataset_counter, args.batch_size, split, method)
 
 
