@@ -27,15 +27,8 @@ import Constants
 
 if not os.path.isdir('running'):
 	os.makedirs('running')
-# emsize = 100  # embedding dimension
-# nhead= 4  # Number of heads in multi-headed attention
-# nhid = 100 # number of hidden states in feedforward network model in nn.TransformerEncoder
-# nlayers = 3 #number of nn.TranfomerEncoderLayer in nn.TransformerEncoder
-# dropout= 0.2
-# batch_size = 16
-# epochs = 80 # The number of epochs
 
-# Initialize parser 
+
 parser = argparse.ArgumentParser() 
 
 parser.add_argument("-embed", "--embedding_size", default=100,help = "Give embedding size")
@@ -49,7 +42,7 @@ parser.add_argument("-l_d", "--nlayers_d", default=3,  help = "Give number of la
 parser.add_argument("-d", "--dropout",default=0.2, help = "Give dropout")
 parser.add_argument("-bs", "--batch_size", default=16, help = "Give batch size")
 parser.add_argument("-e", "--epochs", default=50, help = "Give number of epochs")
-parser.add_argument("-model", "--model_type", default="SET", help="Give model name one of [SET, HIER, MAT]")
+parser.add_argument("-model", "--model_type", default="SET++", help="Give model name one of [SET++, HIER++]")
 
 args = parser.parse_args() 
 
@@ -143,76 +136,7 @@ def train_epoch(model, epoch, batch_size): # losses per batch
 
 
 
-def evaluate_beamsearch(model, dataset, dataset_counter,dataset_act_vecs, batch_size, split):
-	logger.debug('Beam search of size {}'.format(n_beams))
-	model.eval()
-	total_loss =0
-	ntokens = len(wordtoidx)
-	score=0
-	pred_file = open(log_path+'pred_beam_'+str(n_beams)+split+'.txt', 'w')
-	start = time.time()
-
-	# .module. if using dataparallel
-	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs,  batch_size, wordtoidx)):
-
-			# print(i, 'th batch')
-
-			batch_size_curr = targets.shape[1]
-
-			# assert(data.shape[1]==act_vecs.shape[1])
-			# act_vecs is 44,bs
-
-			if isinstance(model, nn.DataParallel):
-				# gives list of sentences itself
-				output = model.module.translate_batch(data, act_vecs, n_beams, batch_size_curr)
-			else:
-				output = model.translate_batch(data, act_vecs, n_beams , batch_size_curr) 
-
-			
-			if i==0:
-				hyp = [torch.tensor(l) for l in output]
-				ref = targets.transpose(0,1)
-			else:
-				hyp.extend([torch.tensor(l) for l in output])
-				ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
-
-		indices = list(range(0, len(dataset)))
-
-		pred_hyp = tensor_to_sents(hyp , wordtoidx)
-		pred_ref = tensor_to_sents(ref, wordtoidx)
-
-		score = BLEU_calc.score(pred_hyp , pred_ref, wordtoidx)*100
-		f1_entity = F1_calc.score(pred_hyp , pred_ref, wordtoidx)*100
-		
-		# temp = []
-		# for idx in indices:
-		# 	temp += [hyp[idx]]
-
-		data, _, _ = name_to_dataset(split)
-
-		all_dialog_files = split_to_files(split)
-		evaluate_dials = {}
-
-		for i, h in enumerate(pred_hyp):
-			if all_dialog_files[i] in evaluate_dials:
-				evaluate_dials[all_dialog_files[i]].append(h)
-			else:
-				evaluate_dials[all_dialog_files[i]]=[h]
-
-		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
-
-		pred_file.write('\n\n***'+split+'***')
-		for idx, h, r in zip(indices, pred_hyp, pred_ref):
-			pred_file.write('\n\nContext: \n'+str('\n'.join(data[idx][:-1])))
-			pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
-	elapsed = time.time()-start
-	logger.debug('==> {} \tLoss: {:0.3f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tElapsed: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, elapsed ))
-	return total_loss, score, f1_entity, matches, successes
-
-
-
-def evaluate_greedysearch(model, dataset, dataset_counter, dataset_act_vecs, batch_size, split):
+def evaluate(model, dataset, dataset_counter, dataset_act_vecs, batch_size, split, method='beam'):
 	batch_size = 64
 
 	logger.debug('Greedy search {}'.format(split))
@@ -225,26 +149,43 @@ def evaluate_greedysearch(model, dataset, dataset_counter, dataset_act_vecs, bat
 	with torch.no_grad():
 		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset,dataset_counter, dataset_act_vecs, batch_size, wordtoidx)):
 
-			# print(i, 'th batch')
 			batch_size_curr = targets.shape[1]
+			# assert(data.shape[1]==act_vecs.shape[1])
+			# act_vecs is 44,bs
 
-			if isinstance(model, nn.DataParallel):
-				output, output_max = model.module.greedy_search(data,act_vecs,  batch_size_curr) # .module. if using dataparallel
-			else:
-				output, output_max = model.greedy_search(data,act_vecs, batch_size_curr) 
+			if method=='beam':
+				if isinstance(model, nn.DataParallel):
+					# gives list of sentences itself
+					output = model.module.translate_batch(data, act_vecs, n_beams, batch_size_curr)
+				else:
+					output = model.translate_batch(data, act_vecs, n_beams , batch_size_curr) 
+			elif method=='greedy':
+				if isinstance(model, nn.DataParallel):
+					output, output_max = model.module.greedy_search(data,act_vecs,  batch_size_curr) # .module. if using dataparallel
+				else:
+					output, output_max = model.greedy_search(data,act_vecs, batch_size_curr) 
+
 
 			label_pad_mask = labels.transpose(0,1)!=0
 			
-			total_loss += criterion(output.view(-1, ntokens), labels.reshape(-1)).item()*batch_size_curr
+			if torch.is_tensor(output): # greedy search
+				total_loss += criterion(output.view(-1, ntokens), labels.reshape(-1)).item()*batch_size_curr
 
-			# output = torch.max(output, dim=2)[1]
-			output_max = post_process(output_max.transpose(0,1))	
-			
-			if i==0:
-				hyp = output_max
+				# output = torch.max(output, dim=2)[1]
+				output_max = post_process(output_max.transpose(0,1))	
+				
+				if i==0:
+					hyp = output_max
+					ref = targets.transpose(0,1)
+				else:
+					hyp = torch.cat((hyp, output_max), dim=0)
+					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
+			else: # beam search
+				if i==0:
+				hyp = [torch.tensor(l) for l in output]
 				ref = targets.transpose(0,1)
 			else:
-				hyp = torch.cat((hyp, output_max), dim=0)
+				hyp.extend([torch.tensor(l) for l in output])
 				ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
 
@@ -278,12 +219,17 @@ def evaluate_greedysearch(model, dataset, dataset_counter, dataset_act_vecs, bat
 		
 		data, _, _ = name_to_dataset(split)
 
-		pred_file = open(log_path+'pred_greedy_'+split+'.txt', 'w')
+		if method=='beam':
+			pred_file = open(log_path+'pred_beam_'+str(beam_size)+'_'+split+'.txt', 'w')
+		elif method=='greedy':
+			pred_file = open(log_path+'pred_greedy_'+split+'.txt', 'w')
+
 		pred_file.write('\n\n***'+split+'***')
 		for idx, h, r in zip(indices, pred_hyp, pred_ref):
-			# pred_file.write()
 			pred_file.write('\n\nContext: \n'+str('\n'.join(data[idx][:-1])))
 			pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
+
+
 	elapsed = time.time()-start
 	logger.debug('==> {} \tLoss: {:0.3f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tElapsed: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, elapsed))
 	return total_loss, score, f1_entity, matches, successes
@@ -351,7 +297,7 @@ def training(model):
 	#		save_model(model, 'checkpoint.pt',train_loss, val_loss_ground, -1)
 	#		continue
 
-		_, val_bleu, val_f1entity, matches, successes = evaluate_greedysearch(model, val, val_counter, val_hierarchial_actvecs, batch_size, 'val')
+		_, val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, val_hierarchial_actvecs, batch_size, 'val', method='greedy')
 		
 		val_bleus.append(val_bleu)
 
@@ -450,9 +396,9 @@ def name_to_dataset(split):
 def testing(model, split, method):
 	data, dataset_counter, dataset_act_vecs = name_to_dataset(split)
 	if method =='greedy':
-		test_loss, test_bleu, test_f1entity, _, _ = evaluate_greedysearch(model, data,dataset_counter, dataset_act_vecs, batch_size, split)
+		test_loss, test_bleu, test_f1entity, _, _ = evaluate(model, data,dataset_counter, dataset_act_vecs, batch_size, split, method='greedy')
 	elif method=='beam':
-		test_loss, test_bleu, test_f1entity, _, _ = evaluate_beamsearch(model, data, dataset_counter, dataset_act_vecs , batch_size, split)
+		test_loss, test_bleu, test_f1entity, _, _ = evaluate(model, data, dataset_counter, dataset_act_vecs , batch_size, split, method='beam')
 
 
 # train, val, test, train_counter, val_counter, test_counter = make_datasets(load=True)
@@ -513,7 +459,7 @@ best_val_loss_ground = load_model(model, 'checkpoint_saved.pt')
 
 val, val_counter, val_hierarchial_actvecs, val_dialog_files = gen_dataset_with_acts('val')
 
-_, best_val_bleu, val_f1entity, matches, successes = evaluate_greedysearch(model, val, val_counter, val_hierarchial_actvecs, batch_size, 'val')
+_, best_val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, val_hierarchial_actvecs, batch_size, 'val', method='greedy')
 criteria = best_val_bleu + 0.5 *(matches+successes)
 
 print('\n\n\n=====>\n')

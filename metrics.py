@@ -41,7 +41,6 @@ def obtain_TP_TN_FN_FP(pred, act, TP, TN, FN, FP, elem_wise=False):
 		return TP, TN, FN, FP
 
 
-# In[28]:
 
 
 class F1Scorer(object):
@@ -97,8 +96,6 @@ class F1Scorer(object):
 		F1 = 2 * precision * recall / (precision + recall + 0.001)
 		return F1
 
-
-# In[29]:
 
 
 class BLEUScorer(object):
