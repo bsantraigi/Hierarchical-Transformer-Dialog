@@ -2,7 +2,7 @@
 ### DATASET:
 
 generated using create_delex_data.py in original multiwoz repository for multiwoz 2.1 version. <br>
-add preprocessed data - train.json, val.json and test.json into hdsa_data/hdsa_data/ folder
+add preprocessed data - train.json, val.json and test.json into hdsa_data/hdsa_data/ folder <br>
 Add delex.json file into data folder, large file(~87MB)
 
 ### MODELS:
