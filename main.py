@@ -138,8 +138,11 @@ def train_epoch(model, epoch, batch_size): # losses per batch
 		# print(loss.item())
 
 		elapsed = time.time()-start_time
+		
+
 	total_loss /= len(train)
 	logger.debug('==> Epoch {}, Train \tLoss: {:0.4f}\tTime taken: {:0.1f}s'.format(epoch,  total_loss, elapsed))
+
 	return total_loss
 
 
@@ -199,6 +202,8 @@ def evaluate(model, dataset, dataset_counter, batch_size, split, method='beam'):
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
 		indices = list(range(0, len(dataset)))
+		# indices = list(range(0, args.batch_size)) #uncomment this to run for one batch
+
 		if torch.is_tensor(hyp):
 			pred_hyp = tensor_to_sents(hyp[indices], wordtoidx)
 		else:
@@ -248,7 +253,7 @@ def evaluate(model, dataset, dataset_counter, batch_size, split, method='beam'):
 
 	elapsed = time.time()-start
 	logger.debug('==> {} \tLoss: {:0.4f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tTime taken: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, elapsed))
-	return total_loss, score, f1_entity # , matches, successes
+	return total_loss, score, f1_entity, matches, successes
 
 
 
@@ -276,10 +281,9 @@ def get_loss_nograd(model, epoch, batch_size, split): # losses per batch
 
 
 # stat_cuda('before training')
-def training(model, best_val_loss_ground):
-	best_val_loss = float("inf")
-	criteria = -float("inf")
-			
+def training(model):
+	global best_val_bleu, criteria, best_val_loss_ground
+
 	best_model = None
 	train_losses = []
 	val_losses = []
@@ -307,7 +311,7 @@ def training(model, best_val_loss_ground):
 			save_model(model, 'checkpoint.pt', train_loss, val_loss_ground, -1)
 			continue
 
-		val_loss, val_bleu, val_f1entity = evaluate(model, val, val_counter, args.batch_size, 'val', 'greedy')
+		val_loss, val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, args.batch_size, 'val', 'greedy')
 
 		if val_bleu > best_val_bleu:
 			best_val_bleu = val_bleu
@@ -468,11 +472,12 @@ best_val_loss_ground = float("inf")
 best_val_bleu = -float("inf")
 criteria = -float("inf")
 
+
 logger.debug('\n\n\n=====>\n')
 
 # best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
 
-best_model = training(model, best_val_loss_ground)
+best_model = training(model)
 
 best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
 
