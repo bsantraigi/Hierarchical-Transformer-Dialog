@@ -337,20 +337,26 @@ def training(model, best_val_loss_ground):
 
 
 
-def save_model(model, name, val_loss=0):
+def save_model(model, name, train_loss, val_loss, val_bleu):
 	checkpoint = {
 					'model': model.state_dict(),
 					'optim': optimizer.state_dict(),
-					'emsize': args.embedding_size,
+					'embedding_size': args.embedding_size,
 					'nhead':args.nhead,
 					'nhid': args.nhid,
 					'nlayers_e1': args.nlayers_e1,
 					'nlayers_e2': args.nlayers_e2,
 					'nlayers_d': args.nlayers_d,
-					'dropout': args.dropout,
-					'val_loss':val_loss
-				 }
-	logger.debug('==> Checkpointing everything now...')
+					'dropout': args.dropout				 }
+
+	if train_loss!=-1:
+		checkpoint['train_loss']=train_loss
+	if val_loss!=-1:
+		checkpoint['val_loss']=val_loss
+	if val_bleu!=-1:
+		checkpoint['val_bleu']=val_bleu
+
+	logger.debug('==> Checkpointing everything now...in {}'.format(name))
 	torch.save(checkpoint, log_path+name)
 
 
