@@ -13,7 +13,8 @@ from datetime import datetime
 from collections import Counter
 import logging
 from nltk.util import ngrams
-import re, json, tqdm
+import re, json
+from tqdm import tqdm
 
 # import spacy
 # import matplotlib.pyplot as plt
@@ -34,17 +35,17 @@ if not os.path.isdir('running'):
 
 parser = argparse.ArgumentParser() 
 
-parser.add_argument("-embed", "--embedding_size", default=100,help = "Give embedding size")
-parser.add_argument("-heads", "--nhead", default=4,  help = "Give number of heads")
-parser.add_argument("-hid", "--nhid", default=100,  help = "Give hidden size")
+parser.add_argument("-embed", "--embedding_size", default=100, type=int, help = "Give embedding size")
+parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads")
+parser.add_argument("-hid", "--nhid", default=100, type=int,  help = "Give hidden size")
 
-parser.add_argument("-l_e1", "--nlayers_e1", default=3,  help = "Give number of layers for Encoder 1")
-parser.add_argument("-l_e2", "--nlayers_e2", default=3,  help = "Give number of layers for Encoder 2")
-parser.add_argument("-l_d", "--nlayers_d", default=3,  help = "Give number of layers for Decoder")
+parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1")
+parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2")
+parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
 
-parser.add_argument("-d", "--dropout",default=0.2, help = "Give dropout")
-parser.add_argument("-bs", "--batch_size", default=16, help = "Give batch size")
-parser.add_argument("-e", "--epochs", default=50, help = "Give number of epochs")
+parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
+parser.add_argument("-bs", "--batch_size", default=16, type=int, help = "Give batch size")
+parser.add_argument("-e", "--epochs", default=50, type=int, help = "Give number of epochs")
 parser.add_argument("-model", "--model_type", default="SET", help="Give model name one of [SET, HIER, MAT]")
 
 args = parser.parse_args() 
@@ -115,7 +116,7 @@ def train_epoch(model, epoch, batch_size): # losses per batch
 #         stat_cuda('before epoch')
 		
 
-	for i, (data, targets, labels) in enumerate(data_loader(train, train_counter, batch_size, wordtoidx)):
+	for i, (data, targets, labels) in tqdm(enumerate(data_loader(train, train_counter, batch_size, wordtoidx)), total=nbatches):
 
 		batch_size_curr = data.shape[1]
 		optimizer.zero_grad()
@@ -158,7 +159,7 @@ def evaluate(model, dataset, dataset_counter, batch_size, split, method='beam'):
 
 	# .module. if using dataparallel
 	with torch.no_grad():
-		for i, (data, targets, labels) in enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)):
+		for i, (data, targets, labels) in tqdm(enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)), total=len(dataset)//batch_size):
 
 			batch_size_curr = targets.shape[1]
 
