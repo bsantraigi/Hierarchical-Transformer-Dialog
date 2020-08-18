@@ -367,7 +367,8 @@ def save_model(model, name, train_loss, val_loss, val_bleu):
 
 
 def load_model(model, checkpoint='checkpoint.pt'):
-	load_file =log_path+ checkpoint
+	global best_val_bleu, best_val_loss_ground
+	load_file =log_path + checkpoint
 	if os.path.isfile(load_file):
 		try:
 			print('Reloading previous checkpoint', load_file)
@@ -377,7 +378,10 @@ def load_model(model, checkpoint='checkpoint.pt'):
 				checkpoint = torch.load(load_file,map_location=lambda storage, loc: storage)
 				new_state_dict = OrderedDict()
 				for k, v in checkpoint['model'].items():
-					name = k[7:] # remove `module.`
+					if k[:6]=="module":
+						name = k[7:] # remove `module.`
+					else:
+						name=k
 					new_state_dict[name] = v
 				# load params
 				model.load_state_dict(new_state_dict)
@@ -388,10 +392,15 @@ def load_model(model, checkpoint='checkpoint.pt'):
 				optimizer.load_state_dict(checkpoint['optim'])
 
 			if(checkpoint.get('val_loss')):
-				best_val_loss= checkpoint.get('val_loss')
+				best_val_loss_ground = checkpoint.get('val_loss')
 			else:
-				best_val_loss, _ , _, _, _= evaluate(model, val, val_counter, args.batch_size, 'val', 'beam')
-			print('Validation loss of loaded model is ', best_val_loss)
+				best_val_loss_ground= get_loss_nograd(model, 0, args.batch_size, 'val')
+			if(checkpoint.get('val_bleu')):
+				best_val_bleu = checkpoint.get('val_bleu')
+				logger.debug('Valid bleu of Loaded model is: {:0.4f}'.format(best_val_bleu))
+
+			logger.debug('Loaded model, Val loss(ground): {:0.8f}'.format(best_val_loss_ground))
+
 		except Exception as e:
 			print('Loading model error')
 			print(e)
@@ -476,7 +485,7 @@ criteria = -float("inf")
 
 logger.debug('\n\n\n=====>\n')
 
-# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
+best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
 
 best_model = training(model)
 

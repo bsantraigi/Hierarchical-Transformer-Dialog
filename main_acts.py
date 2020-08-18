@@ -343,7 +343,7 @@ def save_model(model, name, train_loss, val_loss, val_bleu):
 
 
 def load_model(model, checkpoint='checkpoint.pt'):
-	global best_val_bleu, criteria, best_val_loss_ground
+	global best_val_bleu, best_val_loss_ground
 	load_file =log_path+ checkpoint
 	if os.path.isfile(load_file):
 		try:
@@ -354,8 +354,11 @@ def load_model(model, checkpoint='checkpoint.pt'):
 				checkpoint = torch.load(load_file,map_location=lambda storage, loc: storage)
 				new_state_dict = OrderedDict()
 				for k, v in checkpoint['model'].items():
+					if k[:6]=="module":
 						name = k[7:] # remove `module.`
-						new_state_dict[name] = v
+					else:
+						name=k
+					new_state_dict[name] = v
 				# load params
 				model.load_state_dict(new_state_dict)
 
