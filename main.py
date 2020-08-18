@@ -390,7 +390,7 @@ def load_model(model, checkpoint='checkpoint.pt'):
 			if(checkpoint.get('val_loss')):
 				best_val_loss= checkpoint.get('val_loss')
 			else:
-				best_val_loss, _ , _= evaluate(model, val, val_counter, args.batch_size, 'val', 'beam')
+				best_val_loss, _ , _, _, _= evaluate(model, val, val_counter, args.batch_size, 'val', 'beam')
 			print('Validation loss of loaded model is ', best_val_loss)
 		except Exception as e:
 			print('Loading model error')
@@ -414,7 +414,7 @@ def name_to_dataset(split):
 
 def testing(model, split):
 	data, dataset_counter, _ = name_to_dataset(split)
-	test_loss, test_bleu, test_f1entity = evaluate(model, data, dataset_counter, args.batch_size, split, method)
+	test_loss, test_bleu, test_f1entity, matches, successes = evaluate(model, data, dataset_counter, args.batch_size, split, method)
 
 
 train, train_counter, _ , train_dialog_files = gen_dataset_with_acts('train')
