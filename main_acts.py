@@ -270,6 +270,12 @@ def training(model):
 	train_losses = []
 	val_losses = []
 	val_bleus = []
+
+	if best_val_loss_ground==None: #if not set outside, initialise again
+		best_val_loss_ground=float("inf")
+		best_val_bleu=-float("inf")
+		criteria=-float("inf")
+
 	logger.debug('Best val loss ground at begin of training: {:0.7f}'.format(best_val_loss_ground))
 	logger.debug('Best bleu: {:0.4f}, Best criteria: {}'.format(best_val_bleu, criteria))
 	logger.debug('====> STARTING TRAINING NOW')

@@ -291,6 +291,11 @@ def training(model):
 	train_losses = []
 	val_losses = []
 
+	if best_val_loss_ground==None: #if not set outside, initialise again
+		best_val_loss_ground=float("inf")
+		best_val_bleu=-float("inf")
+		criteria=-float("inf")
+
 	logger.debug('Best val loss ground at begin of training: {:0.7f}'.format(best_val_loss_ground))
 	logger.debug('====> STARTING TRAINING NOW')
 	
@@ -397,6 +402,7 @@ def load_model(model, checkpoint='checkpoint.pt'):
 				best_val_loss_ground = checkpoint.get('val_loss')
 			else:
 				best_val_loss_ground= get_loss_nograd(model, 0, args.batch_size, 'val')
+
 			if(checkpoint.get('val_bleu')):
 				best_val_bleu = checkpoint.get('val_bleu')
 				logger.debug('Valid bleu of Loaded model is: {:0.4f}'.format(best_val_bleu))
