@@ -157,6 +157,8 @@ def evaluate(model, dataset, dataset_counter, batch_size, split, method='beam'):
 	score=0
 	start = time.time()
 
+	logger.debug('{} search {}'.format(method, split))
+
 	# .module. if using dataparallel
 	with torch.no_grad():
 		for i, (data, targets, labels) in tqdm(enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)), total=len(dataset)//batch_size):

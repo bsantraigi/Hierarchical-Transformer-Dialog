@@ -31,17 +31,18 @@ if not os.path.isdir('running'):
 
 parser = argparse.ArgumentParser() 
 
-parser.add_argument("-embed", "--embedding_size", default=100,help = "Give embedding size")
-parser.add_argument("-heads", "--nhead", default=4,  help = "Give number of heads")
-parser.add_argument("-hid", "--nhid", default=100,  help = "Give hidden size")
+parser.add_argument("-embed", "--embedding_size", default=100, type=int, help = "Give embedding size")
+parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads")
+parser.add_argument("-hid", "--nhid", default=100, type=int,  help = "Give hidden size")
 
-parser.add_argument("-l_e1", "--nlayers_e1", default=3,  help = "Give number of layers for Encoder 1")
-parser.add_argument("-l_e2", "--nlayers_e2", default=3,  help = "Give number of layers for Encoder 2")
-parser.add_argument("-l_d", "--nlayers_d", default=3,  help = "Give number of layers for Decoder")
+parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1")
+parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2")
+parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
 
-parser.add_argument("-d", "--dropout",default=0.2, help = "Give dropout")
-parser.add_argument("-bs", "--batch_size", default=16, help = "Give batch size")
-parser.add_argument("-e", "--epochs", default=50, help = "Give number of epochs")
+parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
+parser.add_argument("-bs", "--batch_size", default=16, type=int, help = "Give batch size")
+parser.add_argument("-e", "--epochs", default=50, type=int, help = "Give number of epochs")
+
 parser.add_argument("-model", "--model_type", default="SET++", help="Give model name one of [SET++, HIER++]")
 
 args = parser.parse_args() 
@@ -139,7 +140,7 @@ def train_epoch(model, epoch, batch_size): # losses per batch
 def evaluate(model, dataset, dataset_counter, dataset_act_vecs, batch_size, split, method='beam'):
 	batch_size = 64
 
-	logger.debug('Greedy search {}'.format(split))
+	logger.debug('{} search {}'.format(method, split))
 	model.eval()
 	total_loss =0
 	ntokens = len(wordtoidx)
@@ -198,7 +199,9 @@ def evaluate(model, dataset, dataset_counter, dataset_act_vecs, batch_size, spli
 
 	#	logger.debug('BLEU Scores for different buckets: ')
 	#	logger.debug('Small: {} \tMedium: {}\tLarge: {}'.format(score_small, score_medium, score_large))
+
 		indices = list(range(0, len(dataset)))
+		# indices = list(range(0, args.batch_size)) #uncomment this to run for one batch
 
 		pred_hyp = tensor_to_sents(hyp , wordtoidx)  # hyp[indices]
 		pred_ref = tensor_to_sents(ref, wordtoidx) # ref[indices]
@@ -220,7 +223,7 @@ def evaluate(model, dataset, dataset_counter, dataset_act_vecs, batch_size, spli
 		data, _, _ = name_to_dataset(split)
 
 		if method=='beam':
-			pred_file = open(log_path+'pred_beam_'+str(beam_size)+'_'+split+'.txt', 'w')
+			pred_file = open(log_path+'pred_beam_'+str(n_beams)+'_'+split+'.txt', 'w')
 		elif method=='greedy':
 			pred_file = open(log_path+'pred_greedy_'+split+'.txt', 'w')
 
@@ -470,7 +473,7 @@ val, val_counter, val_hierarchial_actvecs, val_dialog_files = gen_dataset_with_a
 
 print('\n\n\n=====>\n')
 
-best_model = training(model)
+# best_model = training(model)
 
 del train, train_counter, train_hierarchial_actvecs, train_dialog_files
 
@@ -480,10 +483,10 @@ print('\n\n\n=====>\n')
 
 load_model(model, 'checkpoint_bestbleu.pt')
 
-logger.debug('Testing model best bleu \n')
-method = 'greedy'
-testing(model, 'val', method)
-testing(model, 'test', method)
+# logger.debug('Testing model best bleu \n')
+# method = 'greedy'
+# testing(model, 'val', method)
+# testing(model, 'test', method)
 
 
 batch_size = 32
