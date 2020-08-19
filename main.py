@@ -45,7 +45,7 @@ parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give nu
 
 parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
 parser.add_argument("-bs", "--batch_size", default=16, type=int, help = "Give batch size")
-parser.add_argument("-e", "--epochs", default=50, type=int, help = "Give number of epochs")
+parser.add_argument("-e", "--epochs", default=3, type=int, help = "Give number of epochs")
 parser.add_argument("-model", "--model_type", default="SET", help="Give model name one of [SET, HIER, MAT]")
 
 args = parser.parse_args() 
@@ -105,7 +105,7 @@ def split_to_files(split):
 	return None
 
 
-def train_epoch(model, epoch, batch_size): # losses per batch
+def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # losses per batch
 	model.train()
 	total_loss =0
 	start_time = time.time()
@@ -149,7 +149,7 @@ def train_epoch(model, epoch, batch_size): # losses per batch
 
 
 
-def evaluate(model, dataset, dataset_counter, batch_size, split, method='beam'):
+def evaluate(model, dataset, dataset_counter, batch_size,criterion, split, method='beam'):
 #     print(len(dataset))
 	model.eval()
 	total_loss =0
@@ -204,8 +204,8 @@ def evaluate(model, dataset, dataset_counter, batch_size, split, method='beam'):
 					hyp.extend([torch.tensor(l) for l in output])
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
-		indices = list(range(0, len(dataset)))
-		# indices = list(range(0, args.batch_size)) #uncomment this to run for one batch
+		# indices = list(range(0, len(dataset)))
+		indices = list(range(0, args.batch_size)) #uncomment this to run for one batch
 
 		if torch.is_tensor(hyp):
 			pred_hyp = tensor_to_sents(hyp[indices], wordtoidx)
@@ -260,7 +260,7 @@ def evaluate(model, dataset, dataset_counter, batch_size, split, method='beam'):
 
 
 
-def get_loss_nograd(model, epoch, batch_size, split): # losses per batch
+def get_loss_nograd(model, epoch, batch_size, criterion, split): # losses per batch
 	model.eval()
 	total_loss =0
 	start_time = time.time()
@@ -284,7 +284,7 @@ def get_loss_nograd(model, epoch, batch_size, split): # losses per batch
 
 
 # stat_cuda('before training')
-def training(model):
+def training(model, criterion, optimizer, scheduler):
 	global best_val_bleu, criteria, best_val_loss_ground
 
 	best_model = None
@@ -301,9 +301,9 @@ def training(model):
 	
 	for epoch in range(1, args.epochs + 1):
 		epoch_start_time = time.time()
-		train_loss = train_epoch(model, epoch, args.batch_size)
+		train_loss = train_epoch(model, epoch, args.batch_size, criterion, optimizer, scheduler)
 
-		val_loss_ground = get_loss_nograd(model, epoch, args.batch_size, 'val')
+		val_loss_ground = get_loss_nograd(model, epoch, args.batch_size, criterion, 'val')
 
 		train_losses.append(train_loss)
 		val_losses.append(val_loss_ground)
@@ -319,7 +319,7 @@ def training(model):
 			save_model(model, 'checkpoint.pt', train_loss, val_loss_ground, -1)
 			continue
 
-		val_loss, val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, args.batch_size, 'val', 'greedy')
+		val_loss, val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, args.batch_size, criterion, 'val', 'greedy')
 
 		if val_bleu > best_val_bleu:
 			best_val_bleu = val_bleu
@@ -327,7 +327,7 @@ def training(model):
 			logger.debug('==> New optimum found wrt val bleu')
 			save_model(model, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_bleu)
 		
-		if val_bleu+0.5*matches+0.5*successes>criteria:
+		if val_bleu+0.5*matches+0.5*successes > criteria:
 			criteria =  val_bleu+0.5*matches+0.5*successes
 			logger.debug('==> New optimum found wrt val criteria')
 			save_model(model,'checkpoint_criteria.pt',train_loss, val_loss_ground, val_bleu)
@@ -352,7 +352,6 @@ def training(model):
 def save_model(model, name, train_loss, val_loss, val_bleu):
 	checkpoint = {
 					'model': model.state_dict(),
-					'optim': optimizer.state_dict(),
 					'embedding_size': args.embedding_size,
 					'nhead':args.nhead,
 					'nhid': args.nhid,
@@ -374,7 +373,7 @@ def save_model(model, name, train_loss, val_loss, val_bleu):
 
 
 def load_model(model, checkpoint='checkpoint.pt'):
-	global best_val_bleu, best_val_loss_ground
+	global best_val_bleu, best_val_loss_ground, criteria
 	load_file =log_path + checkpoint
 	if os.path.isfile(load_file):
 		try:
@@ -428,14 +427,54 @@ def name_to_dataset(split):
 
 
 
-
-def testing(model, split):
+def testing(model, criterion, split, method):
 	data, dataset_counter, _ = name_to_dataset(split)
-	test_loss, test_bleu, test_f1entity, matches, successes = evaluate(model, data, dataset_counter, args.batch_size, split, method)
+	test_loss, test_bleu, test_f1entity, matches, successes = evaluate(model, data, dataset_counter, args.batch_size, criterion, split, method)
+
+def run(args):
+	model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
+
+	criterion = nn.CrossEntropyLoss(ignore_index=0)
+
+	seed = 123
+	torch.manual_seed(seed)
+
+	if torch.cuda.is_available():
+		torch.cuda.manual_seed(seed)
+		torch.backends.cudnn.benchmark = True
+		torch.set_default_tensor_type('torch.cuda.FloatTensor')
+		# using data parallel
+		model = nn.DataParallel(model, device_ids=[0,1], dim=1)
+		print('putting model on cuda')
+		model.to(device)
+		criterion.to(device)
+
+	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
+
+		
+	optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
+	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.98)
+
+	# load_model(model, 'checkpoint.pt')
+	print('\n\n\n=====>\n')
+
+	logger.debug('\n\n\n=====>\n')
+	# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
+
+	best_model = training(model, criterion, optimizer, scheduler)
+
+	best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
+
+	method = 'greedy'
+	logger.debug('Testing model {}\n'.format(method))
+	testing(model,criterion, 'val', 'greedy')
+	testing(model,criterion, 'test', 'greedy')
+
 
 
 train, train_counter, _ , train_dialog_files = gen_dataset_with_acts('train')
 val, val_counter, _, val_dialog_files = gen_dataset_with_acts('val')
+test, test_counter, _ , test_dialog_files = gen_dataset_with_acts('test')
 
 max_sent_len = 50
 
@@ -458,72 +497,8 @@ ntokens=len(wordtoidx)
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
 
-
-model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
-
-criterion = nn.CrossEntropyLoss(ignore_index=0)
-
-seed = 123
-torch.manual_seed(seed)
-
-if torch.cuda.is_available():
-	torch.cuda.manual_seed(seed)
-	torch.backends.cudnn.benchmark = True
-	torch.set_default_tensor_type('torch.cuda.FloatTensor')
-	# using data parallel
-	model = nn.DataParallel(model, device_ids=[0,1], dim=1)
-	print('putting model on cuda')
-	model.to(device)
-	criterion.to(device)
-
-print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
-
-	
-optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.98)
-
-
-load_model(model, 'checkpoint.pt')
-print('\n\n\n=====>\n')
-
 best_val_loss_ground = float("inf")
 best_val_bleu = -float("inf")
 criteria = -float("inf")
 
-
-logger.debug('\n\n\n=====>\n')
-
-best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
-
-best_model = training(model)
-
-best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
-
-del train, train_counter, train_dialog_files
-test, test_counter, _ , test_dialog_files = gen_dataset_with_acts('test')
-
-
-method = 'greedy'
-logger.debug('Testing model {}\n'.format(method))
-testing(model, 'val')
-testing(model, 'test')
-
-method = 'beam'
-beam_size = 2
-logger.debug('Testing model {} of size {}\n'.format(method, beam_size))
-testing(model, 'val')
-testing(model, 'test')
-
-
-method = 'beam'
-beam_size = 3
-logger.debug('Testing model {} of size {}\n'.format(method, beam_size))
-testing(model, 'val')
-testing(model, 'test')
-
-method = 'beam'
-beam_size = 5
-logger.debug('Testing model {} of size {}\n'.format(method, beam_size))
-testing(model, 'val')
-testing(model, 'test')
-
+# run(args)
