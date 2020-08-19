@@ -19,4 +19,5 @@ parser.add_argument("-model", "--model_type", default="SET", help="Give model na
 
 args = parser.parse_args() 
 
-run(args)
+test_loss, test_bleu, test_f1entity, matches, successes = run(args)
+print(test_loss, test_bleu, test_f1entity, matches, successes)

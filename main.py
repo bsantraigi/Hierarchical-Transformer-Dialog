@@ -430,6 +430,7 @@ def name_to_dataset(split):
 def testing(model, criterion, split, method):
 	data, dataset_counter, _ = name_to_dataset(split)
 	test_loss, test_bleu, test_f1entity, matches, successes = evaluate(model, data, dataset_counter, args.batch_size, criterion, split, method)
+	return test_loss, test_bleu, test_f1entity, matches, successes
 
 def run(args):
 	model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
@@ -467,8 +468,8 @@ def run(args):
 
 	method = 'greedy'
 	logger.debug('Testing model {}\n'.format(method))
-	testing(model,criterion, 'val', 'greedy')
-	testing(model,criterion, 'test', 'greedy')
+	testing(model, criterion, 'val', 'greedy')
+	return testing(model, criterion, 'test', 'greedy')
 
 
 
@@ -501,4 +502,7 @@ best_val_loss_ground = float("inf")
 best_val_bleu = -float("inf")
 criteria = -float("inf")
 
-# run(args)
+run(args)
+
+# model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
+# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
