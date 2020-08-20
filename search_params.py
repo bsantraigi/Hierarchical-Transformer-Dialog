@@ -17,6 +17,9 @@ import torch.optim as optim
 import torch.utils.data
 from torchvision import datasets
 from torchvision import transforms
+import argparse
+from functools import partial
+from main import *
 
 import optuna
 
@@ -30,99 +33,84 @@ N_TRAIN_EXAMPLES = BATCHSIZE * 30
 N_VALID_EXAMPLES = BATCHSIZE * 10
 
 
-def define_model(trial):
+parser = argparse.ArgumentParser() 
+
+# parser.add_argument("-embed", "--embedding_size", default=100, type=int, help = "Give embedding size") #
+# parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads") #
+# parser.add_argument("-hid", "--nhid", default=100, type=int,  help = "Give hidden size") #
+
+# parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1") #
+# parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2") #
+# parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
+
+# parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout") # 
+parser.add_argument("-bs", "--batch_size", default=16, type=int, help = "Give batch size") #
+parser.add_argument("-e", "--epochs", default=3, type=int, help = "Give number of epochs") #
+parser.add_argument("-model", "--model_type", default="SET", help="Give model name one of [SET, HIER, MAT]")
+
+args = parser.parse_args()
+
+class ARGS:
+    def __init__(self, **entries):
+        self.__dict__.update(entries)
+    def __str__(self):
+        return str(self.__dict__)
+        
+def define_args(main_args, trial):
     # We optimize the number of layers, hidden untis and dropout ratio in each layer.
-    n_layers = trial.suggest_int("n_layers", 1, 3)
-    layers = []
+    args2 = {
+        'embedding_size': trial.suggest_int("embedding_size", 50, 400),
+        'nhead': trial.suggest_int("nhead", 2, 10),
+        'nhid': trial.suggest_int("nhid", 50, 400),
+        'nlayers_e1': trial.suggest_int("nlayers_e1", 2, 6),
+        'nlayers_e2': trial.suggest_int("nlayers_e2", 2, 6),
+        'nlayers_d': trial.suggest_int("nlayers_d", 2, 6),
+        'dropout': trial.suggest_float("dropout", 0.0, 0.6),
+        'batch_size': main_args.batch_size,
+        'epochs': main_args.epochs,
+        'model_type': main_args.model_type
+    }
+    
+    args = ARGS(**args2)
+    print(args)
+    return args
 
-    in_features = 28 * 28
-    for i in range(n_layers):
-        out_features = trial.suggest_int("n_units_l{}".format(i), 4, 128)
-        layers.append(nn.Linear(in_features, out_features))
-        layers.append(nn.ReLU())
-        p = trial.suggest_float("dropout_l{}".format(i), 0.2, 0.5)
-        layers.append(nn.Dropout(p))
-
-        in_features = out_features
-    layers.append(nn.Linear(in_features, CLASSES))
-    layers.append(nn.LogSoftmax(dim=1))
-
-    return nn.Sequential(*layers)
-
-
-def get_mnist():
-    # Load MNIST dataset.
-    train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST(DIR, train=True, download=True, transform=transforms.ToTensor()),
-        batch_size=BATCHSIZE,
-        shuffle=True,
-    )
-    valid_loader = torch.utils.data.DataLoader(
-        datasets.MNIST(DIR, train=False, transform=transforms.ToTensor()),
-        batch_size=BATCHSIZE,
-        shuffle=True,
-    )
-
+def get_data():
+    # Load Multiwoz
     return train_loader, valid_loader
 
 
-def objective(trial):
+def objective(main_args, trial):
 
     # Generate the model.
-    model = define_model(trial).to(DEVICE)
+    args = define_args(main_args, trial)
 
     # Generate the optimizers.
-    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
-    lr = trial.suggest_float("lr", 1e-5, 1e-1, log=True)
-    optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr)
+    #optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
+    #lr = trial.suggest_float("lr", 1e-5, 1e-1, log=True)
+    #optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr)
 
-    # Get the MNIST dataset.
-    train_loader, valid_loader = get_mnist()
+    # Get the dataset.
+    #train_loader, valid_loader = get_mnist()
 
-    # Training of the model.
-    model.train()
-    for epoch in range(EPOCHS):
-        for batch_idx, (data, target) in enumerate(train_loader):
-            # Limiting training data for faster epochs.
-            if batch_idx * BATCHSIZE >= N_TRAIN_EXAMPLES:
-                break
-
-            data, target = data.view(data.size(0), -1).to(DEVICE), target.to(DEVICE)
-
-            optimizer.zero_grad()
-            output = model(data)
-            loss = F.nll_loss(output, target)
-            loss.backward()
-            optimizer.step()
-
-        # Validation of the model.
-        model.eval()
-        correct = 0
-        with torch.no_grad():
-            for batch_idx, (data, target) in enumerate(valid_loader):
-                # Limiting validation data.
-                if batch_idx * BATCHSIZE >= N_VALID_EXAMPLES:
-                    break
-                data, target = data.view(data.size(0), -1).to(DEVICE), target.to(DEVICE)
-                output = model(data)
-                # Get the index of the max log-probability.
-                pred = output.argmax(dim=1, keepdim=True)
-                correct += pred.eq(target.view_as(pred)).sum().item()
-
-        accuracy = correct / min(len(valid_loader.dataset), N_VALID_EXAMPLES)
-
-        trial.report(accuracy, epoch)
+    # Training of the model
+    
+    def callback(epoch, val_accuracy): # NewMethod
+        trial.report(val_accuracy, epoch)
 
         # Handle pruning based on the intermediate value.
         if trial.should_prune():
             raise optuna.exceptions.TrialPruned()
-
+    
+    # NewMethod
+    run(args, optuna_callback=callback) # callback should be called internally after each epoch.
+    
     return accuracy
 
 
 if __name__ == "__main__":
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=100, timeout=600)
+    study = optuna.create_study(study_name='hier-study', direction="maximize", storage='sqlite:///hier.db', load_if_exists=True)
+    study.optimize(partial(objective, args), n_trials=100, timeout=600)
 
     pruned_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED]
     complete_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]

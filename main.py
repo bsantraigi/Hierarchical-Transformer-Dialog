@@ -32,69 +32,6 @@ import argparse
 if not os.path.isdir('running'):
 	os.makedirs('running')
 
-
-parser = argparse.ArgumentParser() 
-
-parser.add_argument("-embed", "--embedding_size", default=100, type=int, help = "Give embedding size")
-parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads")
-parser.add_argument("-hid", "--nhid", default=100, type=int,  help = "Give hidden size")
-
-parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1")
-parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2")
-parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
-
-parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
-parser.add_argument("-bs", "--batch_size", default=16, type=int, help = "Give batch size")
-parser.add_argument("-e", "--epochs", default=3, type=int, help = "Give number of epochs")
-parser.add_argument("-model", "--model_type", default="SET", help="Give model name one of [SET, HIER, MAT]")
-
-args = parser.parse_args() 
-
-if args.model_type=="SET":
-	log_path ='running/transformer_set/'
-elif args.model_type=="HIER":
-	log_path ='running/transformer_hier/'
-elif args.model_type=="MAT":
-	log_path ='running/transformer_mat/'
-elif args.model_type=="SET++":
-	log_path ='running/transformer_set++/'
-elif args.model_type=="HIER++":
-	log_path ='running/transformer_hier++/'
-else:
-	print('Invalid model type')
-	raise ValueError
-
-if not os.path.isdir(log_path[:-1]):
-	os.makedirs(log_path[:-1])
-	
-# global logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
-
-# file logger
-fh = logging.FileHandler(log_path+'train.log', mode='a')
-fh.setLevel(logging.DEBUG)
-fh.setFormatter(formatter)
-logger.addHandler(fh)
-
-# console logger - add it when running it on gpu directly to see all sentences
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-ch.setFormatter(formatter)
-logger.addHandler(ch)
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
-
-
-# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") # for single device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
-torch.backends.cudnn.benchmark=True
-
-
-
-
 def split_to_files(split):
 	if split=='train':
 		return train_dialog_files
@@ -284,7 +221,7 @@ def get_loss_nograd(model, epoch, batch_size, criterion, split): # losses per ba
 
 
 # stat_cuda('before training')
-def training(model, criterion, optimizer, scheduler):
+def training(model, criterion, optimizer, scheduler, optuna_callback=None):
 	global best_val_bleu, criteria, best_val_loss_ground
 
 	best_model = None
@@ -320,7 +257,9 @@ def training(model, criterion, optimizer, scheduler):
 			continue
 
 		val_loss, val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, args.batch_size, criterion, 'val', 'greedy')
-
+		if optuna_callback is not None:
+			optuna_callback(epoch, val_score) # Need to pass the score metric on validation set here.
+		
 		if val_bleu > best_val_bleu:
 			best_val_bleu = val_bleu
 			best_model = model
@@ -432,13 +371,84 @@ def testing(model, criterion, split, method):
 	test_loss, test_bleu, test_f1entity, matches, successes = evaluate(model, data, dataset_counter, args.batch_size, criterion, split, method)
 	return test_loss, test_bleu, test_f1entity, matches, successes
 
-def run(args):
+def run(args, optuna_callback=None):
+	if args.model_type=="SET":
+		log_path ='running/transformer_set/'
+	elif args.model_type=="HIER":
+		log_path ='running/transformer_hier/'
+	elif args.model_type=="MAT":
+		log_path ='running/transformer_mat/'
+	elif args.model_type=="SET++":
+		log_path ='running/transformer_set++/'
+	elif args.model_type=="HIER++":
+		log_path ='running/transformer_hier++/'
+	else:
+		print('Invalid model type')
+		raise ValueError
+
+	if not os.path.isdir(log_path[:-1]):
+		os.makedirs(log_path[:-1])
+
+	# global logger
+	logger = logging.getLogger(__name__)
+	logger.setLevel(logging.DEBUG)
+	formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
+
+	# file logger
+	fh = logging.FileHandler(log_path+'train.log', mode='a')
+	fh.setLevel(logging.DEBUG)
+	fh.setFormatter(formatter)
+	logger.addHandler(fh)
+
+	# console logger - add it when running it on gpu directly to see all sentences
+	ch = logging.StreamHandler()
+	ch.setLevel(logging.DEBUG)
+	ch.setFormatter(formatter)
+	logger.addHandler(ch)
+
+	os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+
+
+	# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") # for single device
+	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+	print(device)
+	torch.backends.cudnn.benchmark=True
+	
+	max_sent_len = 50
+
+	# top 1500 words
+	idxtoword, wordtoidx = build_vocab_freqbased(load=False)
+	vocab_size = len(idxtoword)
+
+	with open(log_path+'idxtoword.pkl', 'wb') as file:
+		pkl.dump(idxtoword, file)
+	with open(log_path+'wordtoidx.pkl', 'wb') as file:
+		pkl.dump(wordtoidx, file)
+
+	# print(wordtoidx)
+	print('length of vocab: ', vocab_size)
+
+
+	ntokens=len(wordtoidx)
+
+
+	BLEU_calc = BLEUScorer() 
+	F1_calc = F1Scorer()
+
+	best_val_loss_ground = float("inf")
+	best_val_bleu = -float("inf")
+	criteria = -float("inf")
+	
 	model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
 
 	criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 	seed = 123
 	torch.manual_seed(seed)
+	
+	train, train_counter, _ , train_dialog_files = gen_dataset_with_acts('train')
+	val, val_counter, _, val_dialog_files = gen_dataset_with_acts('val')
+	test, test_counter, _ , test_dialog_files = gen_dataset_with_acts('test')
 
 	if torch.cuda.is_available():
 		torch.cuda.manual_seed(seed)
@@ -452,7 +462,7 @@ def run(args):
 
 	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
 
-		
+	
 	optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.98)
 
@@ -462,7 +472,7 @@ def run(args):
 	logger.debug('\n\n\n=====>\n')
 	# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
 
-	best_model = training(model, criterion, optimizer, scheduler)
+	best_model = training(model, criterion, optimizer, scheduler, optuna_callback)
 
 	best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
 
@@ -471,38 +481,24 @@ def run(args):
 	testing(model, criterion, 'val', 'greedy')
 	return testing(model, criterion, 'test', 'greedy')
 
+if __name__ == "__main__":
+	parser = argparse.ArgumentParser()
 
+	parser.add_argument("-embed", "--embedding_size", default=100, type=int, help = "Give embedding size")
+	parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads")
+	parser.add_argument("-hid", "--nhid", default=100, type=int,  help = "Give hidden size")
 
-train, train_counter, _ , train_dialog_files = gen_dataset_with_acts('train')
-val, val_counter, _, val_dialog_files = gen_dataset_with_acts('val')
-test, test_counter, _ , test_dialog_files = gen_dataset_with_acts('test')
+	parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1")
+	parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2")
+	parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
 
-max_sent_len = 50
+	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
+	parser.add_argument("-bs", "--batch_size", default=16, type=int, help = "Give batch size")
+	parser.add_argument("-e", "--epochs", default=3, type=int, help = "Give number of epochs")
+	parser.add_argument("-model", "--model_type", default="SET", help="Give model name one of [SET, HIER, MAT]")
 
-# top 1500 words
-idxtoword, wordtoidx = build_vocab_freqbased(load=False)
-vocab_size = len(idxtoword)
-
-with open(log_path+'idxtoword.pkl', 'wb') as file:
-	pkl.dump(idxtoword, file)
-with open(log_path+'wordtoidx.pkl', 'wb') as file:
-	pkl.dump(wordtoidx, file)
-
-# print(wordtoidx)
-print('length of vocab: ', vocab_size)
-
-
-ntokens=len(wordtoidx)
-
-
-BLEU_calc = BLEUScorer() 
-F1_calc = F1Scorer()
-
-best_val_loss_ground = float("inf")
-best_val_bleu = -float("inf")
-criteria = -float("inf")
-
-run(args)
+	args = parser.parse_args() 
+	run(args)
 
 # model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
 # best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
