@@ -23,14 +23,14 @@ from main import *
 
 import optuna
 
-DEVICE = torch.device("cpu")
-BATCHSIZE = 128
-CLASSES = 10
-DIR = os.getcwd()
-EPOCHS = 10
-LOG_INTERVAL = 10
-N_TRAIN_EXAMPLES = BATCHSIZE * 30
-N_VALID_EXAMPLES = BATCHSIZE * 10
+# DEVICE = torch.device("cpu")
+# BATCHSIZE = 128
+# CLASSES = 10
+# DIR = os.getcwd()
+# EPOCHS = 10
+# LOG_INTERVAL = 10
+# N_TRAIN_EXAMPLES = BATCHSIZE * 30
+# N_VALID_EXAMPLES = BATCHSIZE * 10
 
 
 parser = argparse.ArgumentParser() 
@@ -75,9 +75,9 @@ def define_args(main_args, trial):
     print(args)
     return args
 
-def get_data():
-    # Load Multiwoz
-    return train_loader, valid_loader
+# def get_data():
+#     # Load Multiwoz
+#     return train_loader, valid_loader
 
 
 def objective(main_args, trial):

@@ -222,16 +222,20 @@ def get_loss_nograd(model, epoch, batch_size, criterion, split): # losses per ba
 
 # stat_cuda('before training')
 def training(model, criterion, optimizer, scheduler, optuna_callback=None):
-	global best_val_bleu, criteria, best_val_loss_ground
+	# global best_val_bleu, criteria, best_val_loss_ground
 
 	best_model = None
 	train_losses = []
 	val_losses = []
 
-	if best_val_loss_ground==None: #if not set outside, initialise again
-		best_val_loss_ground=float("inf")
-		best_val_bleu=-float("inf")
-		criteria=-float("inf")
+	# if best_val_loss_ground==None: #if not set outside, initialise again
+	# 	best_val_loss_ground=float("inf")
+	# 	best_val_bleu=-float("inf")
+	# 	criteria=-float("inf")
+
+	best_val_loss_ground=float("inf")
+	best_val_bleu=-float("inf")
+	best_criteria=-float("inf")
 
 	logger.debug('Best val loss ground at begin of training: {:0.7f}'.format(best_val_loss_ground))
 	logger.debug('====> STARTING TRAINING NOW')
@@ -257,8 +261,10 @@ def training(model, criterion, optimizer, scheduler, optuna_callback=None):
 			continue
 
 		val_loss, val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, args.batch_size, criterion, 'val', 'greedy')
+		val_criteria = val_bleu+0.5*matches+0.5*successes
+
 		if optuna_callback is not None:
-			optuna_callback(epoch, val_score) # Need to pass the score metric on validation set here.
+			optuna_callback(epoch, val_criteria) # Need to pass the score metric on validation set here.
 		
 		if val_bleu > best_val_bleu:
 			best_val_bleu = val_bleu
@@ -266,7 +272,7 @@ def training(model, criterion, optimizer, scheduler, optuna_callback=None):
 			logger.debug('==> New optimum found wrt val bleu')
 			save_model(model, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_bleu)
 		
-		if val_bleu+0.5*matches+0.5*successes > criteria:
+		if val_criteria > best_criteria:
 			criteria =  val_bleu+0.5*matches+0.5*successes
 			logger.debug('==> New optimum found wrt val criteria')
 			save_model(model,'checkpoint_criteria.pt',train_loss, val_loss_ground, val_bleu)
@@ -474,12 +480,13 @@ def run(args, optuna_callback=None):
 
 	best_model = training(model, criterion, optimizer, scheduler, optuna_callback)
 
-	best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
+	# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
 
 	method = 'greedy'
 	logger.debug('Testing model {}\n'.format(method))
 	testing(model, criterion, 'val', 'greedy')
 	return testing(model, criterion, 'test', 'greedy')
+
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
