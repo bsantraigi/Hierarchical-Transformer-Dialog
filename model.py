@@ -88,10 +88,17 @@ class PositionalEncoding(nn.Module):
 		super(PositionalEncoding, self).__init__()
 		self.dropout = nn.Dropout(p=dropout)
 		pe = torch.zeros(max_len, d_model)
-		position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1) # size = (max_len, 1)
-		div_term = torch.exp(torch.arange(0, d_model,2).float() * (-math.log(10000.0) / d_model))
-		pe[:, 0::2] = torch.sin(position * div_term)
-		pe[:, 1::2] = torch.cos(position*div_term)
+		position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)#size = (max_len, 1)
+		
+		if d_model%2==0:
+			div_term = torch.exp(torch.arange(0, d_model,2).float() * (-math.log(10000.0)/d_model))
+			pe[:, 0::2] = torch.sin(position * div_term)
+			pe[:, 1::2] = torch.cos(position*div_term)
+		else:
+			div_term = torch.exp(torch.arange(0, d_model+1, 2).float() * (-math.log(10000.0)/d_model))
+			pe[:, 0::2] = torch.sin(position * div_term)
+			pe[:, 1::2] = torch.cos(position * div_term[:-1])
+
 		pe = pe.unsqueeze(1) # size - (max_len, 1, d_model)
 		self.register_buffer('pe', pe)
 		print('POS ENC. :', pe.size()) # 5000,1,300

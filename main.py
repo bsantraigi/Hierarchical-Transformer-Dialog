@@ -86,7 +86,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 
 
 
-def evaluate(model, dataset, dataset_counter, batch_size,criterion, split, method='beam'):
+def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split, method='beam'):
 #     print(len(dataset))
 	model.eval()
 	total_loss =0
@@ -142,7 +142,7 @@ def evaluate(model, dataset, dataset_counter, batch_size,criterion, split, metho
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
 		# indices = list(range(0, len(dataset)))
-		indices = list(range(0, args.batch_size)) #uncomment this to run for one batch
+		indices = list(range(0, batch_size)) #uncomment this to run for one batch
 
 		if torch.is_tensor(hyp):
 			pred_hyp = tensor_to_sents(hyp[indices], wordtoidx)
@@ -181,9 +181,9 @@ def evaluate(model, dataset, dataset_counter, batch_size,criterion, split, metho
 		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
 
 		if method=='beam':
-			pred_file = open(log_path+'pred_beam_'+str(beam_size)+'_'+split+'.txt', 'w')
+			pred_file = open(args.log_path+'pred_beam_'+str(beam_size)+'_'+split+'.txt', 'w')
 		elif method=='greedy':
-			pred_file = open(log_path+'pred_greedy_'+split+'.txt', 'w')
+			pred_file = open(args.log_path+'pred_greedy_'+split+'.txt', 'w')
 
 		pred_file.write('\n\n***'+split+'***')
 		for idx, h, r in zip(indices, pred_hyp, pred_ref):
@@ -221,7 +221,7 @@ def get_loss_nograd(model, epoch, batch_size, criterion, split): # losses per ba
 
 
 # stat_cuda('before training')
-def training(model, criterion, optimizer, scheduler, optuna_callback=None):
+def training(model, args, criterion, optimizer, scheduler, optuna_callback=None):
 	# global best_val_bleu, criteria, best_val_loss_ground
 
 	best_model = None
@@ -252,15 +252,15 @@ def training(model, criterion, optimizer, scheduler, optuna_callback=None):
 		if val_loss_ground < best_val_loss_ground:
 			best_val_loss_ground = val_loss_ground
 			logger.debug('==> New optimum found wrt val loss')
-			save_model(model, 'checkpoint_bestloss.pt',train_loss, val_loss_ground, -1)
+			save_model(model, args, 'checkpoint_bestloss.pt',train_loss, val_loss_ground, -1)
 
 
 		# for every 3 epochs, evaluate the metrics
 		if epoch%3!=0:
-			save_model(model, 'checkpoint.pt', train_loss, val_loss_ground, -1)
+			save_model(model, args, 'checkpoint.pt', train_loss, val_loss_ground, -1)
 			continue
 
-		val_loss, val_bleu, val_f1entity, matches, successes = evaluate(model, val, val_counter, args.batch_size, criterion, 'val', 'greedy')
+		val_loss, val_bleu, val_f1entity, matches, successes = evaluate(model,args, val, val_counter, args.batch_size, criterion, 'val', 'greedy')
 		val_criteria = val_bleu+0.5*matches+0.5*successes
 
 		if optuna_callback is not None:
@@ -270,14 +270,14 @@ def training(model, criterion, optimizer, scheduler, optuna_callback=None):
 			best_val_bleu = val_bleu
 			best_model = model
 			logger.debug('==> New optimum found wrt val bleu')
-			save_model(model, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_bleu)
+			save_model(model, args, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_bleu)
 		
 		if val_criteria > best_criteria:
 			criteria =  val_bleu+0.5*matches+0.5*successes
 			logger.debug('==> New optimum found wrt val criteria')
-			save_model(model,'checkpoint_criteria.pt',train_loss, val_loss_ground, val_bleu)
+			save_model(model, args, 'checkpoint_criteria.pt',train_loss, val_loss_ground, val_bleu)
 
-		save_model(model, 'checkpoint.pt',train_loss, val_loss_ground, val_bleu)
+		save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, val_bleu)
 
 			
 		scheduler.step()
@@ -294,7 +294,7 @@ def training(model, criterion, optimizer, scheduler, optuna_callback=None):
 
 
 
-def save_model(model, name, train_loss, val_loss, val_bleu):
+def save_model(model, args, name, train_loss, val_loss, val_bleu):
 	checkpoint = {
 					'model': model.state_dict(),
 					'embedding_size': args.embedding_size,
@@ -313,7 +313,7 @@ def save_model(model, name, train_loss, val_loss, val_bleu):
 		checkpoint['val_bleu']=val_bleu
 
 	logger.debug('==> Checkpointing everything now...in {}'.format(name))
-	torch.save(checkpoint, log_path+name)
+	torch.save(checkpoint, args.log_path+name)
 
 
 
@@ -372,12 +372,15 @@ def name_to_dataset(split):
 
 
 
-def testing(model, criterion, split, method):
+def testing(model, args, criterion, split, method):
 	data, dataset_counter, _ = name_to_dataset(split)
-	test_loss, test_bleu, test_f1entity, matches, successes = evaluate(model, data, dataset_counter, args.batch_size, criterion, split, method)
+	test_loss, test_bleu, test_f1entity, matches, successes = evaluate(model, args, data, dataset_counter, args.batch_size, criterion, split, method)
 	return test_loss, test_bleu, test_f1entity, matches, successes
 
+
 def run(args, optuna_callback=None):
+	global logger 
+
 	if args.model_type=="SET":
 		log_path ='running/transformer_set/'
 	elif args.model_type=="HIER":
@@ -395,10 +398,7 @@ def run(args, optuna_callback=None):
 	if not os.path.isdir(log_path[:-1]):
 		os.makedirs(log_path[:-1])
 
-	# global logger
-	logger = logging.getLogger(__name__)
-	logger.setLevel(logging.DEBUG)
-	formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
+	args.log_path = log_path
 
 	# file logger
 	fh = logging.FileHandler(log_path+'train.log', mode='a')
@@ -422,28 +422,7 @@ def run(args, optuna_callback=None):
 	
 	max_sent_len = 50
 
-	# top 1500 words
-	idxtoword, wordtoidx = build_vocab_freqbased(load=False)
-	vocab_size = len(idxtoword)
-
-	with open(log_path+'idxtoword.pkl', 'wb') as file:
-		pkl.dump(idxtoword, file)
-	with open(log_path+'wordtoidx.pkl', 'wb') as file:
-		pkl.dump(wordtoidx, file)
-
-	# print(wordtoidx)
-	print('length of vocab: ', vocab_size)
-
-
 	ntokens=len(wordtoidx)
-
-
-	BLEU_calc = BLEUScorer() 
-	F1_calc = F1Scorer()
-
-	best_val_loss_ground = float("inf")
-	best_val_bleu = -float("inf")
-	criteria = -float("inf")
 	
 	model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
 
@@ -451,10 +430,7 @@ def run(args, optuna_callback=None):
 
 	seed = 123
 	torch.manual_seed(seed)
-	
-	train, train_counter, _ , train_dialog_files = gen_dataset_with_acts('train')
-	val, val_counter, _, val_dialog_files = gen_dataset_with_acts('val')
-	test, test_counter, _ , test_dialog_files = gen_dataset_with_acts('test')
+
 
 	if torch.cuda.is_available():
 		torch.cuda.manual_seed(seed)
@@ -478,14 +454,37 @@ def run(args, optuna_callback=None):
 	logger.debug('\n\n\n=====>\n')
 	# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
 
-	best_model = training(model, criterion, optimizer, scheduler, optuna_callback)
+	best_model = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 
 	# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
 
 	method = 'greedy'
 	logger.debug('Testing model {}\n'.format(method))
-	testing(model, criterion, 'val', 'greedy')
-	return testing(model, criterion, 'test', 'greedy')
+	testing(model, args, criterion, 'val', 'greedy')
+	return testing(model, args, criterion, 'test', 'greedy')
+
+
+
+# global logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
+
+
+train, train_counter, _ , train_dialog_files = gen_dataset_with_acts('train')
+val, val_counter, _, val_dialog_files = gen_dataset_with_acts('val')
+test, test_counter, _ , test_dialog_files = gen_dataset_with_acts('test')
+
+# top 1500 words
+idxtoword, wordtoidx = build_vocab_freqbased(load=False)
+vocab_size = len(idxtoword)
+
+# print(wordtoidx)
+print('length of vocab: ', vocab_size)
+
+BLEU_calc = BLEUScorer() 
+F1_calc = F1Scorer()
+
 
 
 if __name__ == "__main__":
