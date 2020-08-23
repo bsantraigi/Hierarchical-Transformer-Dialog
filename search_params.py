@@ -59,9 +59,11 @@ class ARGS:
 def define_args(main_args, trial):
     # We optimize the number of layers, hidden untis and dropout ratio in each layer.
     args2 = {
-        'embedding_size': trial.suggest_int("embedding_size", 50, 400),
+#         'embedding_size': trial.suggest_int("embedding_size", 50, 400),        
         'nhead': trial.suggest_int("nhead", 2, 10),
-        'nhid': trial.suggest_int("nhid", 50, 400),
+        'embedding_perhead': trial.suggest_int("embedding_size", 25, 40),
+        'nhid_perhead': trial.suggest_int("nhid", 10, 50),
+#         'nhid': trial.suggest_int("nhid", 50, 400),
         'nlayers_e1': trial.suggest_int("nlayers_e1", 2, 6),
         'nlayers_e2': trial.suggest_int("nlayers_e2", 2, 6),
         'nlayers_d': trial.suggest_int("nlayers_d", 2, 6),
@@ -70,6 +72,10 @@ def define_args(main_args, trial):
         'epochs': main_args.epochs,
         'model_type': main_args.model_type
     }
+    
+    # following need to be divisible by nhead
+    args2['embedding_size'] = args2['embedding_perhead']*args2['nhead']
+    args2['nhid'] = args2['nhid_perhead']*args2['nhead']    
     
     args = ARGS(**args2)
     print(args)
@@ -103,12 +109,17 @@ def objective(main_args, trial):
             raise optuna.exceptions.TrialPruned()
     
     # NewMethod
+    best_val_loss_ground = float("inf")
+    best_val_bleu = -float("inf")
+    criteria = -float("inf")
     run(args, optuna_callback=callback) # callback should be called internally after each epoch.
     
     return accuracy
 
 
 if __name__ == "__main__":
+    """GLOBALS
+    """    
     study = optuna.create_study(study_name='hier-study', direction="maximize", storage='sqlite:///hier.db', load_if_exists=True)
     study.optimize(partial(objective, args), n_trials=100, timeout=600)
 
