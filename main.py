@@ -406,11 +406,11 @@ def run(args, optuna_callback=None):
 	fh.setFormatter(formatter)
 	logger.addHandler(fh)
 
-	# console logger - add it when running it on gpu directly to see all sentences
-	ch = logging.StreamHandler()
-	ch.setLevel(logging.DEBUG)
-	ch.setFormatter(formatter)
-	logger.addHandler(ch)
+	# # console logger - add it when running it on gpu directly to see all sentences
+	# ch = logging.StreamHandler()
+	# ch.setLevel(logging.DEBUG)
+	# ch.setFormatter(formatter)
+	# logger.addHandler(ch)
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
@@ -448,12 +448,7 @@ def run(args, optuna_callback=None):
 	optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.98)
 
-	# load_model(model, 'checkpoint.pt')
-	print('\n\n\n=====>\n')
-
 	logger.debug('\n\n\n=====>\n')
-	# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
-
 	best_model = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 
 	# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
@@ -461,8 +456,8 @@ def run(args, optuna_callback=None):
 	method = 'greedy'
 	logger.debug('Testing model {}\n'.format(method))
 	testing(model, args, criterion, 'val', 'greedy')
-	return testing(model, args, criterion, 'test', 'greedy')
-
+	_,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	return test_bleu+0.5*(test_matches+test_successes)
 
 
 # global logger

@@ -23,15 +23,6 @@ from main import *
 
 import optuna
 
-# DEVICE = torch.device("cpu")
-# BATCHSIZE = 128
-# CLASSES = 10
-# DIR = os.getcwd()
-# EPOCHS = 10
-# LOG_INTERVAL = 10
-# N_TRAIN_EXAMPLES = BATCHSIZE * 30
-# N_VALID_EXAMPLES = BATCHSIZE * 10
-
 
 parser = argparse.ArgumentParser() 
 
@@ -81,13 +72,10 @@ def define_args(main_args, trial):
     print(args)
     return args
 
-# def get_data():
-#     # Load Multiwoz
-#     return train_loader, valid_loader
 
 
 def objective(main_args, trial):
-
+    print("\n\n===>", trial)
     # Generate the model.
     args = define_args(main_args, trial)
 
@@ -109,12 +97,13 @@ def objective(main_args, trial):
             raise optuna.exceptions.TrialPruned()
     
     # NewMethod
-    best_val_loss_ground = float("inf")
-    best_val_bleu = -float("inf")
-    criteria = -float("inf")
-    run(args, optuna_callback=callback) # callback should be called internally after each epoch.
+    # best_val_loss_ground = float("inf")
+    # best_val_bleu = -float("inf")
+    # criteria = -float("inf")
+
+    test_criteria = run(args, optuna_callback=callback) # callback should be called internally after each epoch.
     
-    return accuracy
+    return test_criteria
 
 
 if __name__ == "__main__":
