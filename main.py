@@ -235,7 +235,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 
 	best_val_loss_ground=float("inf")
 	best_val_bleu=-float("inf")
-	best_val_criteria=-float("inf")
+	best_criteria=-float("inf")
 
 	logger.debug('Best val loss ground at begin of training: {:0.7f}'.format(best_val_loss_ground))
 	logger.debug('====> STARTING TRAINING NOW')
@@ -254,6 +254,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 			logger.debug('==> New optimum found wrt val loss')
 			save_model(model, args, 'checkpoint_bestloss.pt',train_loss, val_loss_ground, -1)
 
+
 		# for every 3 epochs, evaluate the metrics
 		if epoch%3!=0:
 			save_model(model, args, 'checkpoint.pt', train_loss, val_loss_ground, -1)
@@ -267,11 +268,12 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		
 		if val_bleu > best_val_bleu:
 			best_val_bleu = val_bleu
+			best_model = model
 			logger.debug('==> New optimum found wrt val bleu')
 			save_model(model, args, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_bleu)
 		
-		if val_criteria > best_val_criteria:
-			best_val_criteria = val_criteria
+		if val_criteria > best_criteria:
+			criteria =  val_bleu+0.5*matches+0.5*successes
 			logger.debug('==> New optimum found wrt val criteria')
 			save_model(model, args, 'checkpoint_criteria.pt',train_loss, val_loss_ground, val_bleu)
 
@@ -287,7 +289,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 	# plt.plot(param_range, val_losses, label="Cross-validation loss", color="green")
 	# plt.show()
 
-	return best_val_criteria
+	return best_model
 
 
 
@@ -447,10 +449,19 @@ def run(args, optuna_callback=None):
 	optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.98)
 
-	logger.debug('\n\n=====>Begin training\n')
-	best_val_criteria = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	logger.debug('\n\n\n=====>\n')
+	best_model = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 
-	return best_val_criteria
+	# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
+
+	method = 'greedy'
+	logger.debug('Testing model {}\n'.format(method))
+
+	# _,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	# return test_bleu+0.5*(test_matches+test_successes)
+
+	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
+	return val_bleu+0.5*(val_matches+val_successes)
 
 
 # global logger
@@ -496,9 +507,3 @@ if __name__ == "__main__":
 
 # model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
 # best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
-
-
-# method = 'greedy'
-# logger.debug('Testing model {}\n'.format(method))
-# testing(model, args, criterion, 'val', 'greedy')
-# _,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')

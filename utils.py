@@ -104,8 +104,8 @@ def data_loader(dataset, dataset_counter, batch_size, wordtoidx):
         for i in range(prev, prev+val, batch_size):
 #             print(i, min(batch_size, prev+val-i))
             yield data_gen(dataset,min(batch_size, prev+val-i), i, wordtoidx)
-            break #uncomment both break statements to run for one batch
-        break
+            # break #uncomment both break statements to run for one batch
+        # break
 
         prev += val
 
