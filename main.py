@@ -399,7 +399,8 @@ def run(args, optuna_callback=None):
 	args.log_path = log_path
 
 	# file logger
-	fh = logging.FileHandler(log_path+'train.log', mode='a')
+	time_stamp = '{:%d-%m-%Y_%H:%M:%S}'.format(datetime.now())
+	fh = logging.FileHandler(log_path+'train_'+ time_stamp  +'.log', mode='a')
 	fh.setLevel(logging.DEBUG)
 	fh.setFormatter(formatter)
 	logger.addHandler(fh)

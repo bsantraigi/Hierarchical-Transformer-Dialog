@@ -97,13 +97,9 @@ def objective(main_args, trial):
             raise optuna.exceptions.TrialPruned()
     
     # NewMethod
-    # best_val_loss_ground = float("inf")
-    # best_val_bleu = -float("inf")
-    # criteria = -float("inf")
-
-    test_criteria = run(args, optuna_callback=callback) # callback should be called internally after each epoch.
+    val_criteria = run(args, optuna_callback=callback) # callback should be called internally after each epoch.
     
-    return test_criteria
+    return val_criteria
 
 
 if __name__ == "__main__":
