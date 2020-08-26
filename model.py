@@ -102,7 +102,6 @@ class PositionalEncoding(nn.Module):
 		pe = pe.unsqueeze(1) # size - (max_len, 1, d_model)
 		self.register_buffer('pe', pe)
 		# print('POS ENC. :', pe.size()) # 5000,1,embed_size
-		# print(pe)
 	
 	def forward(self, x): # 1760xbsxembed
 		x = x+self.pe[:x.size(0), :, :].repeat(1, x.size(1), 1)
