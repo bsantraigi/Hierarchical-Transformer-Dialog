@@ -58,7 +58,7 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 			data.append([turn_num, src[:(2*turn_num+1)], [sys], hierarchical_act_vecs, dialog_file])
 
 			src.append(sys)
-	
+	# data = data[:500] # COMMENT THIS IN FINAL RUN
 	print('Length of dataset is', len(data))
 
 	data.sort(key=lambda x:x[0])

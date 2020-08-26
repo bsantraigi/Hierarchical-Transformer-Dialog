@@ -35,7 +35,7 @@ parser = argparse.ArgumentParser()
 # parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
 
 # parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout") # 
-parser.add_argument("-bs", "--batch_size", default=16, type=int, help = "Give batch size") #
+parser.add_argument("-bs", "--batch_size", default=8, type=int, help = "Give batch size") #
 parser.add_argument("-e", "--epochs", default=3, type=int, help = "Give number of epochs") #
 parser.add_argument("-model", "--model_type", default="SET", help="Give model name one of [SET, HIER, MAT]")
 
@@ -51,9 +51,9 @@ def define_args(main_args, trial):
     # We optimize the number of layers, hidden untis and dropout ratio in each layer.
     args2 = {
 #         'embedding_size': trial.suggest_int("embedding_size", 50, 400),        
-        'nhead': trial.suggest_int("nhead", 2, 10),
-        'embedding_perhead': trial.suggest_int("embedding_size", 25, 40),
-        'nhid_perhead': trial.suggest_int("nhid", 10, 50),
+        'nhead': trial.suggest_int("nhead", 2, 8),
+        'embedding_perhead': trial.suggest_int("embedding_perhead", 25, 40),
+        'nhid_perhead': trial.suggest_int("nhid_perhead", 10, 40),
 #         'nhid': trial.suggest_int("nhid", 50, 400),
         'nlayers_e1': trial.suggest_int("nlayers_e1", 2, 6),
         'nlayers_e2': trial.suggest_int("nlayers_e2", 2, 6),
@@ -110,7 +110,7 @@ if __name__ == "__main__":
     """GLOBALS
     """    
     study = optuna.create_study(study_name='hier-study', direction="maximize", storage='sqlite:///hier.db', load_if_exists=True)
-    study.optimize(partial(objective, args), n_trials=100, timeout=600)
+    study.optimize(partial(objective, args), n_trials=20)
 
     pruned_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED]
     complete_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
