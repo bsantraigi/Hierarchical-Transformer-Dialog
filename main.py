@@ -455,9 +455,12 @@ def run(args, optuna_callback=None):
 
 	method = 'greedy'
 	logger.debug('Testing model {}\n'.format(method))
-	testing(model, args, criterion, 'val', 'greedy')
-	_,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	return test_bleu+0.5*(test_matches+test_successes)
+
+	# _,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	# return test_bleu+0.5*(test_matches+test_successes)
+
+	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
+	return val_bleu+0.5*(val_matches+val_successes)
 
 
 # global logger
