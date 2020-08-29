@@ -259,7 +259,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		val_criteria = val_bleu+0.5*matches+0.5*successes
 
 		if optuna_callback is not None:
-			optuna_callback(epoch, val_criteria) # Need to pass the score metric on validation set here.
+			optuna_callback(epoch/3, val_criteria) # Need to pass the score metric on validation set here.
 		
 		if val_bleu > best_val_bleu:
 			best_val_bleu = val_bleu
