@@ -141,8 +141,8 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 					hyp.extend([torch.tensor(l) for l in output])
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
-		# indices = list(range(0, len(dataset)))
-		indices = list(range(0, batch_size)) #uncomment this to run for one batch
+		indices = list(range(0, len(dataset)))
+		# indices = list(range(0, batch_size)) #uncomment this to run for one batch
 
 		if torch.is_tensor(hyp):
 			pred_hyp = tensor_to_sents(hyp[indices], wordtoidx)
@@ -152,7 +152,7 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 				temp += [hyp[idx]]
 			pred_hyp = tensor_to_sents(temp, wordtoidx)
 
-		pred_ref = tensor_to_sents(ref[indices], wordtoidx)		
+		pred_ref = tensor_to_sents(ref[indices], wordtoidx)
 
 		# # calculation for bleu scores of different context lengths
 		# limit_small = len(dataset)//3 
@@ -256,9 +256,9 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 
 
 		# for every 3 epochs, evaluate the metrics
-		if epoch%3!=0:
-			save_model(model, args, 'checkpoint.pt', train_loss, val_loss_ground, -1)
-			continue
+		# if epoch%3!=0:
+		# 	save_model(model, args, 'checkpoint.pt', train_loss, val_loss_ground, -1)
+		# 	continue
 
 		val_loss, val_bleu, val_f1entity, matches, successes = evaluate(model,args, val, val_counter, args.batch_size, criterion, 'val', 'greedy')
 		val_criteria = val_bleu+0.5*matches+0.5*successes
@@ -319,7 +319,7 @@ def save_model(model, args, name, train_loss, val_loss, val_bleu):
 
 def load_model(model, checkpoint='checkpoint.pt'):
 	global best_val_bleu, best_val_loss_ground, criteria
-	load_file =log_path + checkpoint
+	load_file =  checkpoint
 	if os.path.isfile(load_file):
 		try:
 			print('Reloading previous checkpoint', load_file)
@@ -407,11 +407,11 @@ def run(args, optuna_callback=None):
 	fh.setFormatter(formatter)
 	logger.addHandler(fh)
 
-	# # console logger - add it when running it on gpu directly to see all sentences
-	# ch = logging.StreamHandler()
-	# ch.setLevel(logging.DEBUG)
-	# ch.setFormatter(formatter)
-	# logger.addHandler(ch)
+	# console logger - add it when running it on gpu directly to see all sentences
+	ch = logging.StreamHandler()
+	ch.setLevel(logging.DEBUG)
+	ch.setFormatter(formatter)
+	logger.addHandler(ch)
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
@@ -450,17 +450,18 @@ def run(args, optuna_callback=None):
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.98)
 
 	logger.debug('\n\n\n=====>\n')
-	best_model = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	# best_model = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 
-	# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
+	best_val_loss_ground = load_model(model, args.log_path+'checkpoint_bestloss.pt')
 
 	method = 'greedy'
 	logger.debug('Testing model {}\n'.format(method))
 
-	# _,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	# return test_bleu+0.5*(test_matches+test_successes)
-
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
+
+	# _,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+
 	return val_bleu+0.5*(val_matches+val_successes)
 
 
@@ -477,7 +478,7 @@ test, test_counter, _ , test_dialog_files = gen_dataset_with_acts('test')
 # top 1500 words
 idxtoword, wordtoidx = build_vocab_freqbased(load=False)
 vocab_size = len(idxtoword)
-
+ntokens = vocab_size
 # print(wordtoidx)
 print('length of vocab: ', vocab_size)
 
@@ -498,12 +499,12 @@ if __name__ == "__main__":
 	parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
 
 	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
-	parser.add_argument("-bs", "--batch_size", default=16, type=int, help = "Give batch size")
-	parser.add_argument("-e", "--epochs", default=3, type=int, help = "Give number of epochs")
-	parser.add_argument("-model", "--model_type", default="SET", help="Give model name one of [SET, HIER, MAT]")
+	parser.add_argument("-bs", "--batch_size", default=64, type=int, help = "Give batch size")
+	parser.add_argument("-e", "--epochs", default=1, type=int, help = "Give number of epochs")
+	parser.add_argument("-model", "--model_type", default="HIER", help="Give model name one of [SET, HIER, MAT]")
 
 	args = parser.parse_args() 
 	run(args)
 
-# model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
-# best_val_loss_ground = load_model(model, 'checkpoint_bestbleu.pt')
+	# model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
+	# best_val_loss_ground = load_model(model, '../transformers/running/transformer_dyn_hdsaslide_1/checkpoint.pt')

@@ -142,8 +142,8 @@ def evaluateModel(dialogues, mode='valid'):
     fin1 = open('data/delex.json')
     delex_dialogues = json.load(fin1)
 
-    # print('*** No of delex_dialogues: ',len(delex_dialogues))
-    # print('*** No of dialogues: ', len(dialogues), '\n')
+    print('*** No of delex_dialogues: ',len(delex_dialogues))
+    print('*** No of dialogues: ', len(dialogues), '\n')
 
     successes, matches = 0, 0
     real_sucesses, real_matches = 0, 0
