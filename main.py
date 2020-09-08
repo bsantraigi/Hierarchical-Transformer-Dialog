@@ -152,7 +152,7 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 				temp += [hyp[idx]]
 			pred_hyp = tensor_to_sents(temp, wordtoidx)
 
-		pred_ref = tensor_to_sents(ref[indices], wordtoidx)
+		pred_ref = tensor_to_sents(ref[indices], wordtoidx)		
 
 		# # calculation for bleu scores of different context lengths
 		# limit_small = len(dataset)//3 
@@ -228,6 +228,11 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 	train_losses = []
 	val_losses = []
 
+	# if best_val_loss_ground==None: #if not set outside, initialise again
+	# 	best_val_loss_ground=float("inf")
+	# 	best_val_bleu=-float("inf")
+	# 	criteria=-float("inf")
+
 	best_val_loss_ground=float("inf")
 	best_val_bleu=-float("inf")
 	best_criteria=-float("inf")
@@ -259,7 +264,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		val_criteria = val_bleu+0.5*matches+0.5*successes
 
 		if optuna_callback is not None:
-			optuna_callback(epoch/3, val_criteria) # Need to pass the score metric on validation set here.
+			optuna_callback(epoch, val_criteria) # Need to pass the score metric on validation set here.
 		
 		if val_bleu > best_val_bleu:
 			best_val_bleu = val_bleu
@@ -274,6 +279,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 
 		save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, val_bleu)
 
+			
 		scheduler.step()
 
 
@@ -313,7 +319,7 @@ def save_model(model, args, name, train_loss, val_loss, val_bleu):
 
 def load_model(model, checkpoint='checkpoint.pt'):
 	global best_val_bleu, best_val_loss_ground, criteria
-	load_file =  checkpoint
+	load_file = checkpoint
 	if os.path.isfile(load_file):
 		try:
 			print('Reloading previous checkpoint', load_file)
@@ -334,6 +340,7 @@ def load_model(model, checkpoint='checkpoint.pt'):
 			else:
 				checkpoint = torch.load(load_file)
 				model.load_state_dict(checkpoint['model'])
+				# optimizer.load_state_dict(checkpoint['optim'])
 
 			if(checkpoint.get('val_loss')):
 				best_val_loss_ground = checkpoint.get('val_loss')
@@ -395,6 +402,7 @@ def run(args, optuna_callback=None):
 
 	# file logger
 	time_stamp = '{:%d-%m-%Y_%H:%M:%S}'.format(datetime.now())
+	time_stamp = 'hier'
 	fh = logging.FileHandler(log_path+'train_'+ time_stamp  +'.log', mode='a')
 	fh.setLevel(logging.DEBUG)
 	fh.setFormatter(formatter)
@@ -443,18 +451,17 @@ def run(args, optuna_callback=None):
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.98)
 
 	logger.debug('\n\n\n=====>\n')
-	best_model = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-
-	best_val_loss_ground = load_model(model, args.log_path+'checkpoint_criteria.pt')
+	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
+	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
 
 	method = 'greedy'
-	logger.debug('Testing model {} on validtion\n'.format(method))
+	logger.debug('Testing model {}\n'.format(method))
+
+	_,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
-
-	# _,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
-
 	return val_bleu+0.5*(val_matches+val_successes)
 
 
@@ -479,6 +486,7 @@ BLEU_calc = BLEUScorer()
 F1_calc = F1Scorer()
 
 
+
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 
@@ -491,9 +499,12 @@ if __name__ == "__main__":
 	parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
 
 	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
-	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
+	parser.add_argument("-bs", "--batch_size", default=32 , type=int, help = "Give batch size")
 	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
 	parser.add_argument("-model", "--model_type", default="HIER", help="Give model name one of [SET, HIER, MAT]")
 
-	# args = parser.parse_args() 
-	# run(args)
+	args = parser.parse_args() 
+	run(args)
+
+	# model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
+	# best_val_loss_ground = load_model(model, '../transformers/running/transformer_dyn_hdsaslide_1/checkpoint.pt')

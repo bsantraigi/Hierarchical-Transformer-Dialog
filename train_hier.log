@@ -1,0 +1,15 @@
+Length of dataset is 56778
+Loaded and save  train  dataset
+Length of dataset is 7374
+Loaded and save  val  dataset
+Length of dataset is 7372
+Loaded and save  test  dataset
+length of vocab:  1505
+cuda
+putting model on cuda
+Total number of trainable parameters:  0.973305 M
+*** No of delex_dialogues:  10438
+*** No of dialogues:  1000 
+
+Corpus Entity Matches : 26.20%
+Corpus Requestable Success : 11.20%

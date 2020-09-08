@@ -1,4 +1,5 @@
-**__pycache__**
-**.ipynb_checkpoints**
-running/
-HDSA-Dialog/
+hdsa_data
+data
+running
+__pycache__
+preprocessing

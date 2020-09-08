@@ -9,7 +9,7 @@ from torch.autograd import Variable
 # import matplotlib.pyplot as plt
 import time
 import gc
-import spacy, os, sys, json
+import  os, sys, json
 from datetime import datetime
 from collections import Counter
 import Constants
