@@ -59,7 +59,7 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 
 			src.append(sys)
 	# data = data[:500] # COMMENT THIS IN FINAL RUN
-	print('Length of dataset is', len(data))
+	print('Length of', split_name,' dataset is', len(data))
 
 	data.sort(key=lambda x:x[0])
 	c=Counter()
@@ -71,8 +71,7 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 	all_dialog_files = [f[4] for f in data]
 	
 	assert(len(all_data)==len(all_hierarchial_act_vecs))
-
-	print('Loaded and save ', split_name, ' dataset')
+	# print('Loaded and save ', split_name, ' dataset')
 	
 	return all_data, c, all_hierarchial_act_vecs, all_dialog_files
 

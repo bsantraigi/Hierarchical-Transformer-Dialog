@@ -192,7 +192,8 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 		
 
 	elapsed = time.time()-start
-	logger.debug('==> {} \tLoss: {:0.4f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tTime taken: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, elapsed))
+	criteria = score+0.5*(matches+successes)
+	logger.debug('==> {} \tLoss: {:0.4f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tCriteria: {:0.3f}\tTime taken: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, criteria, elapsed))
 	return total_loss, score, f1_entity, matches, successes
 
 
@@ -402,7 +403,6 @@ def run(args, optuna_callback=None):
 
 	# file logger
 	time_stamp = '{:%d-%m-%Y_%H:%M:%S}'.format(datetime.now())
-	time_stamp = 'hier'
 	fh = logging.FileHandler(log_path+'train_'+ time_stamp  +'.log', mode='a')
 	fh.setLevel(logging.DEBUG)
 	fh.setFormatter(formatter)
@@ -451,15 +451,16 @@ def run(args, optuna_callback=None):
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.98)
 
 	logger.debug('\n\n\n=====>\n')
+
 	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
 	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
+	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	method = 'greedy'
 	logger.debug('Testing model {}\n'.format(method))
 
-	_,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+	# _,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	return val_bleu+0.5*(val_matches+val_successes)

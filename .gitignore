@@ -3,3 +3,5 @@ data
 running
 __pycache__
 preprocessing
+.DS_Store
+hier.db
