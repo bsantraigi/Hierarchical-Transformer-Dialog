@@ -240,6 +240,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 
 	logger.debug('Best val loss ground at begin of training: {:0.7f}'.format(best_val_loss_ground))
 	logger.debug('====> STARTING TRAINING NOW')
+	val_epoch_freq=3
 	
 	for epoch in range(1, args.epochs + 1):
 		epoch_start_time = time.time()
@@ -257,7 +258,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 
 
 		# for every 3 epochs, evaluate the metrics
-		if epoch%3!=0:
+		if epoch%val_epoch_freq!=0:
 			save_model(model, args, 'checkpoint.pt', train_loss, val_loss_ground, -1)
 			continue
 
@@ -265,7 +266,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		val_criteria = val_bleu+0.5*matches+0.5*successes
 
 		if optuna_callback is not None:
-			optuna_callback(epoch, val_criteria) # Need to pass the score metric on validation set here.
+			optuna_callback(epoch/val_epoch_freq, val_criteria) # Need to pass the score metric on validation set here.
 		
 		if val_bleu > best_val_bleu:
 			best_val_bleu = val_bleu
