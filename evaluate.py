@@ -142,8 +142,8 @@ def evaluateModel(dialogues, mode='valid'):
     fin1 = open('data/delex.json')
     delex_dialogues = json.load(fin1)
 
-    print('*** No of delex_dialogues: ',len(delex_dialogues))
-    print('*** No of dialogues: ', len(dialogues), '\n')
+    # print('*** No of delex_dialogues: ',len(delex_dialogues))
+    # print('*** No of dialogues: ', len(dialogues), '\n')
 
     successes, matches = 0, 0
     real_sucesses, real_matches = 0, 0
@@ -174,8 +174,9 @@ def evaluateModel(dialogues, mode='valid'):
     matches = matches / float(total) * 100
     successes = successes / float(total) * 100
 
-    print('Corpus Entity Matches : %2.2f%%' % (matches))
-    print('Corpus Requestable Success : %2.2f%%' % (successes))
+    # print('Corpus Entity Matches : %2.2f%%' % (matches))
+    # print('Corpus Requestable Success : %2.2f%%' % (successes))
+    
     # return "{}_{}".format("%2.2f"%bleu, matches, successes)
     return matches, successes
 

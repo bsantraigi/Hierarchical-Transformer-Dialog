@@ -266,22 +266,21 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		val_criteria = val_bleu+0.5*matches+0.5*successes
 
 		if optuna_callback is not None:
-			optuna_callback(epoch/val_epoch_freq, val_criteria) # Need to pass the score metric on validation set here.
+			optuna_callback(epoch/val_epoch_freq, val_criteria) # Pass the score metric on validation set here.
 		
 		if val_bleu > best_val_bleu:
 			best_val_bleu = val_bleu
-			best_model = model
 			logger.debug('==> New optimum found wrt val bleu')
 			save_model(model, args, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_bleu)
 		
 		if val_criteria > best_criteria:
 			criteria =  val_bleu+0.5*matches+0.5*successes
+			best_model = model
 			logger.debug('==> New optimum found wrt val criteria')
 			save_model(model, args, 'checkpoint_criteria.pt',train_loss, val_loss_ground, val_bleu)
 
 		save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, val_bleu)
 
-			
 		scheduler.step()
 
 
@@ -389,10 +388,6 @@ def run(args, optuna_callback=None):
 		log_path ='running/transformer_hier/'
 	elif args.model_type=="MAT":
 		log_path ='running/transformer_mat/'
-	elif args.model_type=="SET++":
-		log_path ='running/transformer_set++/'
-	elif args.model_type=="HIER++":
-		log_path ='running/transformer_hier++/'
 	else:
 		print('Invalid model type')
 		raise ValueError
