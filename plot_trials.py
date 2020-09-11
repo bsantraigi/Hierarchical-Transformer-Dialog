@@ -19,7 +19,6 @@ from torchvision import datasets
 from torchvision import transforms
 import argparse
 from functools import partial
-from main import *
 
 import optuna
 
@@ -106,8 +105,7 @@ if __name__ == "__main__":
     """GLOBALS
     """    
     study = optuna.create_study(study_name='hier-study', direction="maximize", storage='sqlite:///hier.db', load_if_exists=True)
-    study.optimize(partial(objective, args), n_trials=10)
-
+    
     pruned_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED]
     complete_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
 
