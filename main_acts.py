@@ -54,7 +54,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	accumulated_steps = 3
 	optimizer.zero_grad()
 
-	for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(train, train_counter, train_hierarchial_actvecs, batch_size, wordtoidx)):
+	for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(train, train_counter, train_hierarchial_actvecs, batch_size, wordtoidx)), total=nbatches):
 
 		batch_size_curr = data.shape[1]
 		# optimizer.zero_grad() 			
@@ -93,7 +93,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 	nbatches = len(dataset)//batch_size
 
 	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset,dataset_counter, dataset_act_vecs, batch_size, wordtoidx)):
+		for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(dataset,dataset_counter, dataset_act_vecs, batch_size, wordtoidx)), total=len(dataset)//batch_size):
 
 			batch_size_curr = targets.shape[1]
 			# assert(data.shape[1]==act_vecs.shape[1])
@@ -179,7 +179,9 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 
 
 	elapsed = time.time()-start
-	logger.debug('==> {} \tLoss: {:0.3f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tElapsed: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, elapsed))
+	criteria = score+0.5*(matches+successes)
+	logger.debug('==> {} \tLoss: {:0.4f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tCriteria: {:0.3f}\tTime taken: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, criteria, elapsed))
+	# logger.debug('==> {} \tLoss: {:0.3f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tElapsed: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, elapsed))
 	return total_loss, score, f1_entity, matches, successes
 
 
