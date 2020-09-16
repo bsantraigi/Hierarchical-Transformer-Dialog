@@ -18,5 +18,5 @@ module load compiler/cuda/10.1
 export CUDA_VISIBLE_DEVICES=0,1
 mpirun -bootstrap slurm which python
 mpirun -bootstrap slurm nvcc --version
-mpirun -bootstrap slurm python search_params_acts.py -e 5 -model HIER++
-#mpirun -bootstrap slurm python search_params_acts.py -e 5 -model SET++
+#mpirun -bootstrap slurm python search_params_acts.py -e 5 -model HIER++
+mpirun -bootstrap slurm python search_params_acts.py -e 5 -model SET++

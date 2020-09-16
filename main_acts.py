@@ -45,6 +45,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	total_loss =0
 	start_time = time.time()
 	ntokens = len(idxtoword)
+	nbatches = len(train)//batch_size
 	
 #     if torch.cuda.is_available():
 #         stat_cuda('before epoch')
