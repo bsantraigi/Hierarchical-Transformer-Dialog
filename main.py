@@ -274,7 +274,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 			save_model(model, args, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_bleu)
 		
 		if val_criteria > best_criteria:
-			criteria =  val_bleu+0.5*matches+0.5*successes
+			best_criteria =  val_criteria
 			best_model = model
 			logger.debug('==> New optimum found wrt val criteria')
 			save_model(model, args, 'checkpoint_criteria.pt',train_loss, val_loss_ground, val_bleu)
