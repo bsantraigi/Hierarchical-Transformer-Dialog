@@ -416,6 +416,8 @@ def run(args, optuna_callback=None):
 	ch.setLevel(logging.DEBUG)
 	ch.setFormatter(formatter)
 	logger.addHandler(ch)
+	
+	logger.debug('===> \n\n' + str(args) + '\n===>\n\n')
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 

@@ -19,4 +19,8 @@ module load compiler/cuda/10.1
 export CUDA_VISIBLE_DEVICES=0,1
 mpirun -bootstrap slurm which python
 mpirun -bootstrap slurm nvcc --version
-mpirun -bootstrap slurm python main.py -embed 96 -heads 4 -hid 64 -l_e1 4 -l_e2 2 -l_d 2 -d 0.2024 -bs 8 -e 30 -model HIER
+mpirun -bootstrap slurm python main.py -embed 104 -heads 4 -hid 64 -l_e1 4 -l_e2 2 -l_d 2 -d 0.2024 -bs 8 -e 30 -model HIER
+
+# {'nhead': 4, 'embedding_perhead': 26, 'nhid_perhead': 16, 'nlayers_e1': 4, 'nlayers_e2': 2, 'nlayers_d': 2, 'dropout': 0.20244212555189078, 'batch_size': 8, 'epochs': 5, 'model_type': 'HIER', 'embedding_size': 104, 'nhid': 64}
+
+# [I 2020-09-08 23:24:51,165] Trial 2 finished with value: 55.70961030741921 and parameters: {'nhead': 4, 'embedding_perhead': 26, 'nhid_perhead': 16, 'nlayers_e1': 4, 'nlayers_e2': 2, 'nlayers_d': 2, 'dropout': 0.20244212555189078}. Best is trial 2 with value: 55.70961030741921.
