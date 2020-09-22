@@ -82,10 +82,12 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 
 
 
-def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size, criterion, split, method='beam'):
+def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size, criterion, split, method='beam', beam_size=None):
 	batch_size = args.batch_size
 
 	logger.debug('{} search {}'.format(method, split))
+	if method=='beam':
+		logger.debug('Beam size {}'.format(beam_size))
 	model.eval()
 	total_loss =0
 	ntokens = len(wordtoidx)
@@ -103,9 +105,9 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 			if method=='beam':
 				if isinstance(model, nn.DataParallel):
 					# gives list of sentences itself
-					output = model.module.translate_batch(data, act_vecs, n_beams, batch_size_curr)
+					output = model.module.translate_batch(data, act_vecs, beam_size, batch_size_curr)
 				else:
-					output = model.translate_batch(data, act_vecs, n_beams , batch_size_curr) 
+					output = model.translate_batch(data, act_vecs, beam_size , batch_size_curr) 
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
 					output, output_max = model.module.greedy_search(data,act_vecs,  batch_size_curr) # .module. if using dataparallel
@@ -169,7 +171,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 		data, _, _ = name_to_dataset(split)
 
 		if method=='beam':
-			pred_file = open(args.log_path+'pred_beam_'+str(n_beams)+'_'+split+'.txt', 'w')
+			pred_file = open(args.log_path+'pred_beam_'+str(beam_size)+'_'+split+'.txt', 'w')
 		elif method=='greedy':
 			pred_file = open(args.log_path+'pred_greedy_'+split+'.txt', 'w')
 
@@ -364,6 +366,19 @@ def testing(model, args, criterion, split, method):
 		return evaluate(model, args, data, dataset_counter, dataset_act_vecs , args.batch_size, criterion, split, method='beam')
 
 
+def test_split(split, model, args, criterion):
+	data, dataset_counter, dataset_act_vecs = name_to_dataset(split)
+	# greedy
+	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'greedy')
+	# beam 2
+	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 2)
+	# beam 3
+	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 3)
+	# beam 5
+	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 5)
+	
+
+
 # global logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -452,19 +467,19 @@ def run(args, optuna_callback=None):
 
 	logger.debug('\n\n\n=====>\n')
 
-	# best_val_loss_ground = float("inf")
-	# best_val_bleu = -float("inf")
-	# criteria = -float("inf")
-
 	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
 	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 
-	logger.debug('Testing model\n')
-	method = 'greedy'
+	# # To get only greedy score for test
+	# logger.debug('Test greedy scores:')
 	# _,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
 	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+
+	# # To get greedy, beam(2,3,5) scores for val, test 
+	# test_split('val', model, args, criterion)
+	# test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	return val_bleu+0.5*(val_matches+val_successes)
