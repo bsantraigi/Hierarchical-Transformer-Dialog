@@ -423,6 +423,8 @@ def run(args, optuna_callback=None):
 	ch.setLevel(logging.DEBUG)
 	ch.setFormatter(formatter)
 	logger.addHandler(ch)
+	
+	logger.debug('===> \n\n' + str(args) + '\n===>\n\n')
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
@@ -459,7 +461,7 @@ def run(args, optuna_callback=None):
 	
 	optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.98)
-
+	
 	logger.debug('\n\n\n=====>\n')
 
 	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
@@ -518,6 +520,7 @@ if __name__ == "__main__":
 	parser.add_argument("-model", "--model_type", default="HIER", help="Give model name one of [SET, HIER, MAT]")
 
 	args = parser.parse_args() 
+	
 	run(args)
 
 	# model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
