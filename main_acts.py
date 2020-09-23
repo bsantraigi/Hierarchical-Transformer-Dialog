@@ -464,9 +464,11 @@ def run(args, optuna_callback=None):
 
 
 	logger.debug('Testing model\n')
+	
 	method = 'greedy'
-	# _,test_bleu ,_,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+	_,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	logger.debug('==> \tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}'.format(test_bleu, test_f1, test_matches, test_successes))
+	logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	return val_bleu+0.5*(val_matches+val_successes)
