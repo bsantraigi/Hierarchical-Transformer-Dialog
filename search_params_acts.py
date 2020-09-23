@@ -106,7 +106,7 @@ if __name__ == "__main__":
     """GLOBALS
     """
     study = optuna.create_study(study_name='hier-study', direction="maximize", storage=f'sqlite:///{args.model_type.lower()}.db', load_if_exists=True)
-    study.optimize(partial(objective, args), n_trials=10)
+    study.optimize(partial(objective, args), n_trials=20)
 
     pruned_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED]
     complete_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
