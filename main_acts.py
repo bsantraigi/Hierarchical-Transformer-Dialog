@@ -38,6 +38,16 @@ def split_to_files(split):
 	if split=='test':
 		return test_dialog_files
 	return None
+
+
+def split_to_responses(split): # return original responses
+	if split=='train':
+		return train_responses
+	if split=='val':
+		return val_responses
+	if split=='test':
+		return test_responses
+	return ValueError
 	
 
 def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # losses per batch
@@ -96,7 +106,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 	nbatches = len(dataset)//batch_size
 
 	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(dataset,dataset_counter, dataset_act_vecs, batch_size, wordtoidx)), total=len(dataset)//batch_size):
+		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset,dataset_counter, dataset_act_vecs, batch_size, wordtoidx)): # , total=len(dataset)//batch_size):
 
 			batch_size_curr = targets.shape[1]
 			# assert(data.shape[1]==act_vecs.shape[1])
@@ -148,11 +158,13 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 	#	logger.debug('BLEU Scores for different buckets: ')
 	#	logger.debug('Small: {} \tMedium: {}\tLarge: {}'.format(score_small, score_medium, score_large))
 
-		indices = list(range(0, len(dataset)))
-		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
+		# indices = list(range(0, len(dataset)))
+		indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
 
 		pred_hyp = tensor_to_sents(hyp , wordtoidx)  # hyp[indices]
-		pred_ref = tensor_to_sents(ref, wordtoidx) # ref[indices]
+		# pred_ref = tensor_to_sents(ref, wordtoidx) # ref[indices] # prevly used
+		pred_ref = split_to_responses(split)
+		# pred_ref = split_to_responses(split)[:args.batch_size] # uncomment for 1 batch
 		
 		score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
 		f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
@@ -384,9 +396,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
 
-train,train_counter,train_hierarchial_actvecs,train_dialog_files = gen_dataset_with_acts('train')
-val, val_counter, val_hierarchial_actvecs, val_dialog_files = gen_dataset_with_acts('val')
-test, test_counter, test_hierarchial_actvecs, test_dialog_files=gen_dataset_with_acts('test')
+train,train_counter,train_hierarchial_actvecs,train_dialog_files, train_responses = gen_dataset_with_acts('train')
+val, val_counter, val_hierarchial_actvecs, val_dialog_files, val_responses = gen_dataset_with_acts('val')
+test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses =gen_dataset_with_acts('test')
 
 
 max_sent_len = 50
@@ -470,8 +482,8 @@ def run(args, optuna_callback=None):
 	logger.debug('\n\n\n=====>\n')
 
 	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
-	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
+	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 
 	# # To get only greedy score for test
