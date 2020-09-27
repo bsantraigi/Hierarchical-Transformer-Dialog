@@ -42,6 +42,11 @@ For SET++/HIER++:
 python main_acts.py
 
 
+### Branches
 
+branch act_emb: 
+instead of 44dim multi-hot act -> emb_size
+do 44dim multihot act -> 44,emb_size -> emb_size
+Increases vocab size by 1, as word 'pricerange' not in vocab now
 
 

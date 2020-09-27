@@ -160,6 +160,11 @@ def build_vocab_freqbased(load): # [ no of turns , src, tgt, act_vecs, hierarchi
 		if k not in idxtoword.values():
 			idxtoword[i] = k
 			i += 1
+	for w in Constants.domains+Constants.functions+Constants.arguments:
+		if w not in idxtoword.values():
+			idxtoword[i]=w
+			i+=1
+
 	wordtoidx = {v:k for k,v in idxtoword.items()}
 	return idxtoword, wordtoidx
 

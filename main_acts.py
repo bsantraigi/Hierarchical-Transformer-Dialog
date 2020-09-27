@@ -413,15 +413,20 @@ ntokens=len(wordtoidx)
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
 
+hier_act_graph_name = []
+for w in Constants.domains+Constants.functions+Constants.arguments:
+	hier_act_graph_name.append(wordtoidx.get(w, 1))
+
+print(hier_act_graph_name)
 
 
 def run(args, optuna_callback=None):
 	global logger 
 
 	if args.model_type=="SET++":
-		log_path ='running/transformer_set++/'
+		log_path ='running/transformer_set++_act/'
 	elif args.model_type=="HIER++":
-		log_path ='running/transformer_hier++/'
+		log_path ='running/transformer_hier++_act/'
 	else:
 		print('Invalid model type')
 		raise ValueError
@@ -458,7 +463,7 @@ def run(args, optuna_callback=None):
 	ntokens=len(wordtoidx)
 
 
-	model = Transformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
+	model = Transformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type, hier_act_graph_name).to(device)
 	criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 	seed = 123
@@ -482,7 +487,7 @@ def run(args, optuna_callback=None):
 	logger.debug('\n\n\n=====>\n')
 
 	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
-	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 
@@ -518,4 +523,5 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	run(args)
+
 

@@ -323,8 +323,10 @@ class Transformer(nn.Module):
 
 
 
+
+
 class Transformer_acts(nn.Module):
-	def __init__(self, ntoken, ninp, nhead, nhid, nlayers_e1, nlayers_e2, nlayers_d, dropout, ablation):
+	def __init__(self, ntoken, ninp, nhead, nhid, nlayers_e1, nlayers_e2, nlayers_d, dropout, ablation, hieract_graphids ):
 		# ninp is embed_size
 		super(Transformer_acts, self).__init__()
 		from torch.nn import TransformerEncoder, TransformerEncoderLayer, TransformerDecoder, TransformerDecoderLayer
@@ -344,7 +346,7 @@ class Transformer_acts(nn.Module):
 		
 		self.ninp = ninp
 
-		self.act_embedding = nn.Linear(44, self.ninp) # Comment this for transformers_dyn_hdsaslide_1 checkpoint
+		self.act_embedding = nn.Linear(44*self.ninp, self.ninp) # Comment this for transformers_dyn_hdsaslide_1 checkpoint
 
 		if ablation=='SET++':
 			self.mask_func = _gen_mask
@@ -355,6 +357,7 @@ class Transformer_acts(nn.Module):
 			raise ValueError
 
 		self.ablation = ablation
+		self.hieract_graphids = torch.tensor(hieract_graphids, device=device)
 		
 		# self.max_sent_len = tgt_mask.size(0)
 		self._reset_parameters()
@@ -411,9 +414,12 @@ class Transformer_acts(nn.Module):
 		
 		# decoder - tgt shape - (msl, batch_size, embed)- add act_vec of (None ,bs,embed)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
-		# act_vecs.T is batch_size, 44 ->embed of 100
 
-		tgt = self.pos_encoder(tgt) + self.act_embedding(act_vecs.transpose(0,1)).unsqueeze(0)
+		# hieract_graphids - 1, (44, emb_size) * act_vecs.T - (bs, 44), 1 ->
+		# hieract_graph_emb -   bs, 44*emb_size
+		hieract_graph_emb = (self.encoder(self.hieract_graphids).unsqueeze(0) * act_vecs.transpose(0,1).unsqueeze(2)).reshape(batch_size, -1)
+
+		tgt = self.pos_encoder(tgt) + self.act_embedding(hieract_graph_emb).unsqueeze(0)
 		output = self.transformer_decoder(tgt, memory, tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
 		
 		# check_nan(output, 'output')
