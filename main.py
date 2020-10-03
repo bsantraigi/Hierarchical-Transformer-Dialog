@@ -86,7 +86,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 
 
 
-def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split, method='beam'):
+def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split, method='beam', beam_size=None):
 #     print(len(dataset))
 	model.eval()
 	total_loss =0
@@ -95,6 +95,8 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 	start = time.time()
 
 	logger.debug('{} search {}'.format(method, split))
+	if method=='beam':
+		logger.debug('Beam size {}'.format(beam_size))
 
 	# .module. if using dataparallel
 	with torch.no_grad():
@@ -378,6 +380,18 @@ def testing(model, args, criterion, split, method):
 	test_loss, test_bleu, test_f1entity, matches, successes = evaluate(model, args, data, dataset_counter, args.batch_size, criterion, split, method)
 	return test_loss, test_bleu, test_f1entity, matches, successes
 
+def test_split(split, model, args, criterion):
+	data, dataset_counter, _ = name_to_dataset(split)
+	# greedy
+	evaluate(model, args, data, dataset_counter, args.batch_size, criterion, split, 'greedy')
+	# beam 2
+	evaluate(model, args, data, dataset_counter, args.batch_size, criterion, split, 'beam', 2)
+	# beam 3
+	evaluate(model, args, data, dataset_counter, args.batch_size, criterion, split, 'beam', 3)
+	# beam 5
+	evaluate(model, args, data, dataset_counter, args.batch_size, criterion, split, 'beam', 5)
+	
+
 
 def run(args, optuna_callback=None):
 	global logger 
@@ -460,6 +474,10 @@ def run(args, optuna_callback=None):
 	_,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
 	logger.debug('==> \tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}'.format(test_bleu, test_f1, test_matches, test_successes))
 	logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+
+	# # To get greedy, beam(2,3,5) scores for val, test 
+	# test_split('val', model, args, criterion)
+	# test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	return val_bleu+0.5*(val_matches+val_successes)
