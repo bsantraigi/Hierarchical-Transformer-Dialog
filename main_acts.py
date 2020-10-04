@@ -158,11 +158,10 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 	#	logger.debug('BLEU Scores for different buckets: ')
 	#	logger.debug('Small: {} \tMedium: {}\tLarge: {}'.format(score_small, score_medium, score_large))
 
-		# indices = list(range(0, len(dataset)))
-		indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
+		indices = list(range(0, len(dataset)))
+		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
 
 		pred_hyp = tensor_to_sents(hyp , wordtoidx)  # hyp[indices]
-		# pred_ref = tensor_to_sents(ref, wordtoidx) # ref[indices] # prevly used
 		pred_ref = split_to_responses(split)
 		# pred_ref = split_to_responses(split)[:args.batch_size] # uncomment for 1 batch
 		
@@ -196,7 +195,6 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 	elapsed = time.time()-start
 	criteria = score+0.5*(matches+successes)
 	logger.debug('==> {} \tLoss: {:0.4f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tCriteria: {:0.3f}\tTime taken: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, criteria, elapsed))
-	# logger.debug('==> {} \tLoss: {:0.3f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tElapsed: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, elapsed))
 	return total_loss, score, f1_entity, matches, successes
 
 
@@ -482,16 +480,13 @@ def run(args, optuna_callback=None):
 	logger.debug('\n\n\n=====>\n')
 
 	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
-	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
+	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
-
-	logger.debug('Testing model\n')
-	
-	method = 'greedy'
-	_,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	logger.debug('==> \tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}'.format(test_bleu, test_f1, test_matches, test_successes))
-	logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+	# logger.debug('Testing model\n')
+	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	# logger.debug('==>Test \tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}'.format(test_bleu, test_f1, test_matches, test_successes))
+	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)
