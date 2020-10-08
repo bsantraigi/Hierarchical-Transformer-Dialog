@@ -65,7 +65,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	accumulated_steps = 3
 	optimizer.zero_grad()
 
-	for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(train, train_counter, train_hierarchial_actvecs, batch_size, wordtoidx)), total=nbatches):
+	for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(train, train_counter, train_hierarchial_actvecs, batch_size, wordtoidx)):
 
 		batch_size_curr = data.shape[1]
 		# optimizer.zero_grad() 			
@@ -286,6 +286,37 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 	return best_model
 
 
+def train_action_pred(model, args, criterion, optimizer, scheduler):
+	ntokens = len(idxtoword)
+	# nbatches = len(train)//args.batch_size
+	model.train()
+
+	for e in range(1, 1+args.epochs):
+		total_loss =0
+		start_time = time.time()
+		
+		optimizer.zero_grad()
+
+		for i, (data, bs, act_vecs) in enumerate(data_loader_action_pred(train, train_counter, train_bs_kb, train_hierarchial_actvecs, args.batch_size, wordtoidx)):
+
+			batch_size_curr = data.shape[1]
+			optimizer.zero_grad()	
+
+			output = model(data, bs)
+
+			loss = criterion(output.view(-1), act_vecs.reshape(-1))
+			loss.backward()
+		
+			torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+			optimizer.step()
+
+			total_loss += cur_loss.item()*batch_size_curr
+
+		elapsed = time.time()-start_time
+		total_loss /= len(train)
+		logger.debug('==>Action Prediction: Epoch {}, Train \tLoss: {:0.4f}\tTime taken: {:0.1f}'.format(epoch,  total_loss, elapsed))
+	return 
+
 
 
 def save_model(model, args, name, train_loss, val_loss, val_bleu):
@@ -394,10 +425,10 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
 
-train,train_counter,train_hierarchial_actvecs,train_dialog_files, train_responses = gen_dataset_with_acts('train')
-val, val_counter, val_hierarchial_actvecs, val_dialog_files, val_responses = gen_dataset_with_acts('val')
-test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses =gen_dataset_with_acts('test')
 
+train,train_counter,train_hierarchial_actvecs,train_dialog_files, train_responses, train_bs_kb = gen_dataset_joint('train')
+val, val_counter, val_hierarchial_actvecs, val_dialog_files, val_responses, val_bs_kb = gen_dataset_joint('val')
+test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses, test_bs_kb =gen_dataset_joint('test')
 
 max_sent_len = 50
 
@@ -405,18 +436,19 @@ idxtoword, wordtoidx = build_vocab_freqbased(load=False)
 vocab_size = len(idxtoword)
 
 print('length of vocab: ', vocab_size)
+# print(idxtoword)
 
 ntokens=len(wordtoidx)
-
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
-
 
 
 def run(args, optuna_callback=None):
 	global logger 
 
-	if args.model_type=="SET++":
+	if args.model_type=="action_pred":
+		log_path ='running/action_pred/'
+	elif args.model_type=="SET++":
 		log_path ='running/transformer_set++/'
 	elif args.model_type=="HIER++":
 		log_path ='running/transformer_hier++/'
@@ -456,8 +488,12 @@ def run(args, optuna_callback=None):
 	ntokens=len(wordtoidx)
 
 
-	model = Transformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
-	criterion = nn.CrossEntropyLoss(ignore_index=0)
+	if args.model_type=="action_pred":
+		model = Action_predictor(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.dropout)
+		criterion = nn.CrossEntropyLoss()
+	else:
+		model = Transformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
+		criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 	seed = 123
 	torch.manual_seed(seed)
@@ -479,13 +515,16 @@ def run(args, optuna_callback=None):
 
 	logger.debug('\n\n\n=====>\n')
 
+	train_action_pred(model, args, criterion, optimizer, scheduler)
+
+	return
+
 	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
-	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
+	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	# logger.debug('Testing model\n')
 	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	# logger.debug('==>Test \tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}'.format(test_bleu, test_f1, test_matches, test_successes))
 	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# # To get greedy, beam(2,3,5) scores for val, test 

@@ -162,6 +162,50 @@ def data_loader_acts(dataset, dataset_counter, act_vecs, batch_size, wordtoidx):
         prev += val
 
 
+# Create batches for action predictor
+def data_gen_action_pred(dataset, belief_states, act_vecs, batch_size, i, wordtoidx):
+    # print(i, len(dataset))
+
+    max_dial_len = len(dataset[i])-1
+
+    upper_bound = i+batch_size
+    vectorised_seq = []
+    tokenized_bs = []
+
+    for d in dataset[i:upper_bound]:
+        vectorised_seq.append([wordtoidx.get(word, 1) for word in tokenize_en(d[-1])])
+
+    for bs in belief_states[i:upper_bound]:
+        tokenized_bs.append([wordtoidx.get(word, 1) for word in tokenize_en(bs)])
+
+    batch_actvecs = torch.tensor(act_vecs[i:upper_bound], device=device)
+    seq_tensor = torch.zeros(batch_size, max_sent_len, device=device)
+    bs_tensor = torch.zeros(batch_size, max_sent_len, device=device)
+
+    for idx, (seq, bs) in enumerate(zip(vectorised_seq, tokenized_bs)):
+        seq_tensor[idx, :len(seq)] = torch.LongTensor(seq)
+        bs_tensor[idx, :len(bs)] = torch.LongTensor(bs)
+
+    seq_tensor = seq_tensor.transpose(0,1) # seq_tensor - (msl , bs)
+    bs_tensor = bs_tensor.transpose(0, 1) # (msl, bs)
+    batch_actvecs = batch_actvecs.transpose(0,1) # batch_actvecs - 44, bs
+    
+    return seq_tensor.long(), bs_tensor.long(), batch_actvecs.float()
+
+# DataLoader for action prediction
+def data_loader_action_pred(dataset, dataset_counter, belief_states, act_vecs, batch_size, wordtoidx): 
+    # return batches according to dialog len, -> all similar at once
+    # do mask also for these
+    prev=0
+    for dial_len, val in dataset_counter.items():
+        for i in range(prev, prev+val, batch_size):
+            # print(i, min(batch_size, prev+val-i))
+            yield data_gen_action_pred(dataset, belief_states, act_vecs, min(batch_size, prev+val-i), i, wordtoidx)
+        #     break # uncomment both break's to run for 1 batch for Action Prediction
+        # break
+        prev += val
+
+
 
 def plot_grad_flow(named_parameters):
     '''Plots the gradients flowing through different layers in the net during training.

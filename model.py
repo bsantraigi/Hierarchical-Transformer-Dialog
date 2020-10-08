@@ -384,8 +384,6 @@ class Transformer_acts(nn.Module):
 		src_pad_mask_sent= (src_sent==0).transpose(0,1)
 		
 		# this mask depends on mdl, make dynamically
-		# src_mask_sent = _gen_mask_hierarchical(max_dial_len*max_sent_len, max_sent_len) # this mask focuses on utterances like te1
-		# src_mask_sent = _gen_mask(max_dial_len*max_sent_len) # this mask is unidirectional
 		src_mask_sent = self.mask_func(max_dial_len*max_sent_len, max_sent_len)
 
 		src = src.reshape(max_sent_len, -1)
@@ -540,5 +538,62 @@ class Transformer_acts(nn.Module):
 				result.append(_[0])
 		return result
 	
+
+
+class Action_predictor(nn.Module):
+	def __init__(self, ntoken, ninp, nhead, nhid, nlayers_e1, nlayers_e2, dropout):
+		# ninp is embed_size
+		super(Transformer_acts, self).__init__()
+		from torch.nn import TransformerEncoder, TransformerEncoderLayer
+		
+		encoder_layers1 = TransformerEncoderLayer(ninp, nhead, nhid, dropout) ## sizes
+		self.transformer_encoder=TransformerEncoder(encoder_layers1, nlayers_e1)
+
+		# encoder_layers2 = TransformerEncoderLayer(ninp, nhead, nhid, dropout, activation='relu')
+		# self.transformer_encoder_sent = TransformerEncoder(encoder_layers2, nlayers_e2)
+		self.max_sent_len=50
+		self.encoder = nn.Embedding(ntoken, ninp)
+		self.pos_encoder = PositionalEncoding(ninp, dropout)
+		self.linear = nn.Linear(2*self.max_sent_len*ninp, 44)
+		
+		self.ninp = ninp
+		self._reset_parameters()
+
+	def _reset_parameters(self):
+		r"""Initiate parameters in the transformer model."""
+		for n, p in self.named_parameters():
+			if p.dim() > 1:
+				# print(n)
+				torch.nn.init.xavier_normal_(p)
+	
+	def init_weights(self):
+		initrange = 0.1
+		self.encoder.weight.data.uniform_(-initrange, initrange)
+		self.decoder.bias.data.zero_()
+		self.decoder.weight.data.uniform_(-initrange, initrange)
+	
+	def forward(self, src, belief_state):
+		'''
+		src - msl x BS, belief_state = mslxBS, output - 44 x BS 
+		'''
+		src = self.encoder(src) * math.sqrt(self.ninp)
+		src = self.pos_encoder(src)
+		src_mask = torch.zeros(self.max_sent_len, self.max_sent_len, device=device)
+		src_pad_mask = (src==0).transpose(0,1)
+
+		# encoder 1
+		memory_inter = self.transformer_encoder(src, src_mask, src_pad_mask)
+
+		# no need of positional encoder for belief state
+		belief_state = self.encoder(belief_state)*math.sqrt(self.ninp)
+
+		memory_inter = torch.concat([memory_inter, belief_state], dim=0).transpose(0,1).reshape(batch_size, -1)
+
+		# memory_inter shape - bs, 2*msl, embed
+
+		output = self.linear(memory_inter).transpose(0,1)
+		output = torch.sigmoid(output)
+
+		return output
 
 	

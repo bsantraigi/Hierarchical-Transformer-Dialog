@@ -15,9 +15,7 @@ def append_or_add(dictionary, name, key):
 
 domains = ['restaurant', 'hotel', 'attraction', 'train', 'taxi', 'hospital', 'police', 'bus', 'booking', 'general']
 functions = ['inform', 'request', 'recommend', 'book', 'select', 'sorry', 'none']
-arguments = ['pricerange', 'id', 'address', 'postcode', 'type', 'food', 'phone', 'name', 'area', 'choice', 
-             'price', 'time', 'reference', 'none', 'parking', 'stars', 'internet', 'day', 'arriveby', 'departure', 
-             'destination', 'leaveat', 'duration', 'trainid', 'people', 'department', 'stay']
+arguments = ['pricerange', 'id', 'address', 'postcode', 'type', 'food', 'phone', 'name', 'area', 'choice',  'price', 'time', 'reference', 'none', 'parking', 'stars', 'internet', 'day', 'arriveby', 'departure', 'destination', 'leaveat', 'duration', 'trainid', 'people', 'department', 'stay']
 
 used_levels = domains + functions + arguments
 #used_levels = functions + arguments
