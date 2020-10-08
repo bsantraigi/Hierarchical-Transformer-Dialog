@@ -26,6 +26,8 @@ from evaluate import evaluateModel
 import Constants
 import argparse
 
+from sklearn.metrics import precision_recall_fscore_support
+
 if not os.path.isdir('running'):
 	os.makedirs('running')
 
@@ -47,6 +49,15 @@ def split_to_responses(split): # return original responses
 		return val_responses
 	if split=='test':
 		return test_responses
+	return ValueError
+
+def get_files(split): # dataset, dataset_counter, dataset_bs_kb, dataset_actvecs
+	if split=='train':
+		return train, train_counter, train_bs_kb, train_hierarchial_actvecs
+	if split=='val':
+		return val, val_counter, val_bs_kb, val_hierarchial_actvecs
+	if split=='test':
+		return test, test_counter, test_bs_kb, test_hierarchial_actvecs
 	return ValueError
 	
 
@@ -294,7 +305,6 @@ def train_action_pred(model, args, criterion, optimizer, scheduler):
 	for e in range(1, 1+args.epochs):
 		total_loss =0
 		start_time = time.time()
-		
 		optimizer.zero_grad()
 
 		for i, (data, bs, act_vecs) in enumerate(data_loader_action_pred(train, train_counter, train_bs_kb, train_hierarchial_actvecs, args.batch_size, wordtoidx)):
@@ -310,13 +320,55 @@ def train_action_pred(model, args, criterion, optimizer, scheduler):
 			torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
 			optimizer.step()
 
-			total_loss += cur_loss.item()*batch_size_curr
+			print(loss.item())
+			total_loss += loss.item()*batch_size_curr
+			
 
 		elapsed = time.time()-start_time
 		total_loss /= len(train)
 		logger.debug('==>Action Prediction: Epoch {}, Train \tLoss: {:0.4f}\tTime taken: {:0.1f}'.format(epoch,  total_loss, elapsed))
+		save_model(model, args, 'checkpoint.pt', total_loss, -1, -1)
+		
 	return 
 
+
+def evaluate_action_pred(model, args, criterion, optimizer, scheduler, split):
+	model.eval()
+
+	total_loss =0
+	start_time = time.time()
+	optimizer.zero_grad()
+	pred_actvecs =[]
+
+	dataset, dataset_counter, dataset_bs_kb, dataset_actvecs = get_files(split)
+
+	for i, (data, bs, act_vecs) in enumerate(data_loader_action_pred(dataset, dataset_counter, dataset_bs_kb, dataset_actvecs, args.batch_size, wordtoidx)):
+
+		batch_size_curr = data.shape[1]
+		output = model(data, bs)
+		loss = criterion(output.view(-1), act_vecs.reshape(-1))	
+		total_loss += loss.item()*batch_size_curr
+		
+		pred = (output>=0.5).transpose(0,1).long().numpy()
+		# print(pred)
+		pred_actvecs.extend(pred)
+
+	# dataset_actvecs = dataset_actvecs[:args.batch_size] # uncomment for one batch
+	
+	assert(len(dataset_actvecs)==len(pred_actvecs))
+
+	flat_dataset_actvecs = [item for sublist in dataset_actvecs for item in sublist]
+	flat_pred_actvecs = [item for sublist in pred_actvecs for item in sublist]
+	# print(len(flat_dataset_actvecs) ,len(flat_pred_actvecs))
+
+	# calculate precision, recall, f1-score from sklearn
+	precision, recall, f1_score, _ = precision_recall_fscore_support(flat_dataset_actvecs, flat_pred_actvecs, average='binary')
+	logger.debug('Precision: {:0.2f}\tRecall: {:0.2f}\tF1 Score: {:0.2f}'.format(precision*100, recall*100, f1_score*100))
+
+	elapsed = time.time()-start_time
+	total_loss /= len(dataset)
+	logger.debug('==>Action Prediction: {} \tLoss: {:0.4f}\tTime taken: {:0.1f}'.format(split,  total_loss, elapsed))
+	return
 
 
 def save_model(model, args, name, train_loss, val_loss, val_bleu):
@@ -490,7 +542,7 @@ def run(args, optuna_callback=None):
 
 	if args.model_type=="action_pred":
 		model = Action_predictor(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.dropout)
-		criterion = nn.CrossEntropyLoss()
+		criterion = nn.BCELoss()
 	else:
 		model = Transformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
 		criterion = nn.CrossEntropyLoss(ignore_index=0)
@@ -515,7 +567,8 @@ def run(args, optuna_callback=None):
 
 	logger.debug('\n\n\n=====>\n')
 
-	train_action_pred(model, args, criterion, optimizer, scheduler)
+	# train_action_pred(model, args, criterion, optimizer, scheduler)
+	evaluate_action_pred(model, args, criterion, optimizer, scheduler, 'test')
 
 	return
 

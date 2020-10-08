@@ -206,7 +206,6 @@ def data_loader_action_pred(dataset, dataset_counter, belief_states, act_vecs, b
         prev += val
 
 
-
 def plot_grad_flow(named_parameters):
     '''Plots the gradients flowing through different layers in the net during training.
     Can be used for checking for possible gradient vanishing / exploding problems.

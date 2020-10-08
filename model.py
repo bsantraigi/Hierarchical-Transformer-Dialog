@@ -543,7 +543,7 @@ class Transformer_acts(nn.Module):
 class Action_predictor(nn.Module):
 	def __init__(self, ntoken, ninp, nhead, nhid, nlayers_e1, nlayers_e2, dropout):
 		# ninp is embed_size
-		super(Transformer_acts, self).__init__()
+		super(Action_predictor, self).__init__()
 		from torch.nn import TransformerEncoder, TransformerEncoderLayer
 		
 		encoder_layers1 = TransformerEncoderLayer(ninp, nhead, nhid, dropout) ## sizes
@@ -576,10 +576,13 @@ class Action_predictor(nn.Module):
 		'''
 		src - msl x BS, belief_state = mslxBS, output - 44 x BS 
 		'''
-		src = self.encoder(src) * math.sqrt(self.ninp)
-		src = self.pos_encoder(src)
+		# print(src.shape, belief_state.shape)
+		batch_size = src.shape[1]
 		src_mask = torch.zeros(self.max_sent_len, self.max_sent_len, device=device)
 		src_pad_mask = (src==0).transpose(0,1)
+
+		src = self.encoder(src) * math.sqrt(self.ninp)
+		src = self.pos_encoder(src)
 
 		# encoder 1
 		memory_inter = self.transformer_encoder(src, src_mask, src_pad_mask)
@@ -587,7 +590,7 @@ class Action_predictor(nn.Module):
 		# no need of positional encoder for belief state
 		belief_state = self.encoder(belief_state)*math.sqrt(self.ninp)
 
-		memory_inter = torch.concat([memory_inter, belief_state], dim=0).transpose(0,1).reshape(batch_size, -1)
+		memory_inter = torch.stack([memory_inter, belief_state], dim=0).transpose(0,1).reshape(batch_size, -1)
 
 		# memory_inter shape - bs, 2*msl, embed
 
