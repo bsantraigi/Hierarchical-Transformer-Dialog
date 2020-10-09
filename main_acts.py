@@ -301,6 +301,7 @@ def train_action_pred(model, args, criterion, optimizer, scheduler):
 	ntokens = len(idxtoword)
 	# nbatches = len(train)//args.batch_size
 	model.train()
+	best_val_f1 = -float("inf")
 
 	for e in range(1, 1+args.epochs):
 		total_loss =0
@@ -311,23 +312,22 @@ def train_action_pred(model, args, criterion, optimizer, scheduler):
 
 			batch_size_curr = data.shape[1]
 			optimizer.zero_grad()	
-
 			output = model(data, bs)
-
 			loss = criterion(output.view(-1), act_vecs.reshape(-1))
 			loss.backward()
-		
 			torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
 			optimizer.step()
-
-			print(loss.item())
 			total_loss += loss.item()*batch_size_curr
 			
-
 		elapsed = time.time()-start_time
 		total_loss /= len(train)
-		logger.debug('==>Action Prediction: Epoch {}, Train \tLoss: {:0.4f}\tTime taken: {:0.1f}'.format(epoch,  total_loss, elapsed))
-		save_model(model, args, 'checkpoint_ap.pt', total_loss, -1, -1)
+		logger.debug('==>Train Epoch {}, Train \tLoss: {:0.4f}\tTime taken: {:0.1f}'.format(e,  total_loss, elapsed))
+
+		val_precision, val_recall, val_f1 = evaluate_action_pred(model, args, criterion, optimizer, scheduler, 'val')
+		logger.debug('Val Precision: {:0.2f}\tRecall: {:0.2f}\tF1 Score: {:0.2f}'.format(precision*100, recall*100, f1_score*100))
+		if val_f1 > best_val_f1:
+			best_val_f1 = val_f1
+			save_model(model, args, 'checkpoint_ap.pt', total_loss, -1, -1)
 		
 	return 
 
@@ -583,6 +583,8 @@ def run(args, optuna_callback=None):
 
 	logger.debug('\n\n\n=====>\n')
 
+
+	load_model(model, 'checkpoint_ap.pt')
 	train_action_pred(model, args, criterion, optimizer, scheduler)
 	evaluate_action_pred(model, args, criterion, optimizer, scheduler, 'test')
 
