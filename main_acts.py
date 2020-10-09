@@ -26,7 +26,7 @@ from evaluate import evaluateModel
 import Constants
 import argparse
 
-from sklearn.metrics import precision_recall_fscore_support
+# from sklearn.metrics import precision_recall_fscore_support
 
 if not os.path.isdir('running'):
 	os.makedirs('running')
@@ -327,10 +327,23 @@ def train_action_pred(model, args, criterion, optimizer, scheduler):
 		elapsed = time.time()-start_time
 		total_loss /= len(train)
 		logger.debug('==>Action Prediction: Epoch {}, Train \tLoss: {:0.4f}\tTime taken: {:0.1f}'.format(epoch,  total_loss, elapsed))
-		save_model(model, args, 'checkpoint.pt', total_loss, -1, -1)
+		save_model(model, args, 'checkpoint_ap.pt', total_loss, -1, -1)
 		
 	return 
 
+def compute_metrics(y_true, y_pred):
+	# precision = tp/tp+fp, recall = tp/tp+fn
+	y_true = np.array(y_true)
+	y_pred = np.array(y_pred)
+
+	tp = sum(y_true*y_pred)
+	fp = sum(np.logical_not(y_true)*y_pred)
+	tn = sum(np.logical_not(y_true)*np.logical_not(y_pred))
+	fn = sum(y_true*np.logical_not(y_pred))
+	precision = tp/(tp+fp)
+	recall = tp/(tp+fn)
+	f1_score = 2*precision*recall/(precision+recall)
+	return precision, recall, f1_score
 
 def evaluate_action_pred(model, args, criterion, optimizer, scheduler, split):
 	model.eval()
@@ -361,9 +374,12 @@ def evaluate_action_pred(model, args, criterion, optimizer, scheduler, split):
 	flat_pred_actvecs = [item for sublist in pred_actvecs for item in sublist]
 	# print(len(flat_dataset_actvecs) ,len(flat_pred_actvecs))
 
-	# calculate precision, recall, f1-score from sklearn
-	precision, recall, f1_score, _ = precision_recall_fscore_support(flat_dataset_actvecs, flat_pred_actvecs, average='binary')
-	logger.debug('Precision: {:0.2f}\tRecall: {:0.2f}\tF1 Score: {:0.2f}'.format(precision*100, recall*100, f1_score*100))
+	# calculate precision, recall, f1-score from sklearn/ compute_metrics
+
+	# precision, recall, f1_score, _ = precision_recall_fscore_support(flat_dataset_actvecs, flat_pred_actvecs, average='binary')
+
+	precision, recall, f1_score = compute_metrics(flat_dataset_actvecs, flat_pred_actvecs)
+	logger.debug('Action Prediction: Precision: {:0.2f}\tRecall: {:0.2f}\tF1 Score: {:0.2f}'.format(precision*100, recall*100, f1_score*100))
 
 	elapsed = time.time()-start_time
 	total_loss /= len(dataset)
@@ -567,7 +583,7 @@ def run(args, optuna_callback=None):
 
 	logger.debug('\n\n\n=====>\n')
 
-	# train_action_pred(model, args, criterion, optimizer, scheduler)
+	train_action_pred(model, args, criterion, optimizer, scheduler)
 	evaluate_action_pred(model, args, criterion, optimizer, scheduler, 'test')
 
 	return
