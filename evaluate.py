@@ -180,6 +180,51 @@ def evaluateModel(dialogues, mode='valid'):
     # return "{}_{}".format("%2.2f"%bleu, matches, successes)
     return matches, successes
 
+def evaluateModel_Slow(dialogues, mode='valid'):
+    """Gathers statistics for the whole sets."""
+    fin1 = open('data/delex.json')
+    delex_dialogues = json.load(fin1)
+
+    # print('*** No of delex_dialogues: ',len(delex_dialogues))
+    # print('*** No of dialogues: ', len(dialogues), '\n')
+
+    successes, matches = 0, 0
+    real_sucesses, real_matches = 0, 0
+    total = 0
+
+    gen_stats = {'restaurant': [0, 0, 0], 'hotel': [0, 0, 0], 'attraction': [0, 0, 0], 'train': [0, 0, 0], 'taxi': [0, 0, 0],
+                 'hospital': [0, 0, 0], 'police': [0, 0, 0]}
+    sng_gen_stats = {'restaurant': [0, 0, 0], 'hotel': [0, 0, 0], 'attraction': [0, 0, 0], 'train': [0, 0, 0],
+                     'taxi': [0, 0, 0],
+                     'hospital': [0, 0, 0], 'police': [0, 0, 0]}
+
+    filenames = sorted(dialogues.keys())
+    all_stats = []
+    for filename in filenames:
+        dial = dialogues[filename]
+        if filename not in delex_dialogues:
+            filename += ".json"
+
+        data = delex_dialogues[filename]
+
+        # print(dial, '\n',  data)
+        success, match, stats = evaluateDialogue(dial, data)
+        all_stats.append((match, success))
+
+        successes += success
+        matches += match
+        total += 1
+
+    # Print results
+    matches = matches / float(total) * 100
+    successes = successes / float(total) * 100
+
+    # print('Corpus Entity Matches : %2.2f%%' % (matches))
+    # print('Corpus Requestable Success : %2.2f%%' % (successes))
+    
+    # return "{}_{}".format("%2.2f"%bleu, matches, successes)
+    return matches, successes, all_stats
+
 
 def evaluateDialogue(dialog, realDialogue):
     # get the list of domains in the goal
