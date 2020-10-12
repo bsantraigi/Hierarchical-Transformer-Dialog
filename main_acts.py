@@ -51,13 +51,22 @@ def split_to_responses(split): # return original responses
 		return test_responses
 	return ValueError
 
-def get_files(split): # dataset, dataset_counter, dataset_bs_kb, dataset_actvecs
+def get_files_action_pred(split): # dataset, dataset_counter, dataset_bs_kb, dataset_actvecs
 	if split=='train':
 		return train, train_counter, train_bs_kb, train_hierarchial_actvecs
 	if split=='val':
 		return val, val_counter, val_bs_kb, val_hierarchial_actvecs
 	if split=='test':
 		return test, test_counter, test_bs_kb, test_hierarchial_actvecs
+	return ValueError
+
+def get_files_action_pred(split): # dataset, dataset_counter, dataset_bs_kb, dataset_actvecs
+	if split=='train':
+		return train, train_counter, train_bs, train_dialog_act
+	if split=='val':
+		return val, val_counter, val_bs, val_dialog_act
+	if split=='test':
+		return test, test_counter, test_bs, test_dialog_act
 	return ValueError
 	
 
@@ -76,11 +85,10 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	accumulated_steps = 3
 	optimizer.zero_grad()
 
-	for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(train, train_counter, train_hierarchial_actvecs, batch_size, wordtoidx)):
+	for i, (data, targets, labels, bs, da, bs_output, da_output) in enumerate(data_loader_acts(train, train_counter, train_bs, train_dialog_act, batch_size, wordtoidx)):
 
 		batch_size_curr = data.shape[1]
-		# optimizer.zero_grad() 			
-
+		# optimizer.zero_grad()
 		output = model(data, targets, act_vecs)
 
 		cur_loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
@@ -117,7 +125,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 	nbatches = len(dataset)//batch_size
 
 	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset,dataset_counter, dataset_act_vecs, batch_size, wordtoidx)): # , total=len(dataset)//batch_size):
+		for i, (data, targets, labels, bs, da, bs_output, da_output) in enumerate(data_loader_acts(dataset,dataset_counter, dataset_act_vecs, batch_size, wordtoidx)): # , total=len(dataset)//batch_size):
 
 			batch_size_curr = targets.shape[1]
 			# assert(data.shape[1]==act_vecs.shape[1])
@@ -219,7 +227,7 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 	dataset, dataset_counter, dataset_act_vecs = name_to_dataset(split)	
 	
 	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs,  batch_size, wordtoidx)):
+		for i, (data, targets, labels, bs, da, bs_output, da_output) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs,  batch_size, wordtoidx)):
 
 			batch_size_curr = data.shape[1]
 			output = model(data, targets,  act_vecs)
@@ -383,7 +391,7 @@ def evaluate_action_pred(model, args, criterion, optimizer, scheduler, split):
 
 	elapsed = time.time()-start_time
 	total_loss /= len(dataset)
-	logger.debug('==>Action Prediction: {} \tLoss: {:0.4f}\tTime taken: {:0.1f}'.format(split,  total_loss, elapsed))
+	logger.debug('==>Action Prediction: {} \t Loss: {:0.4f}\tTime taken: {:0.1f}'.format(split,  total_loss, elapsed))
 	return
 
 
@@ -493,10 +501,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
 
-
-train,train_counter,train_hierarchial_actvecs,train_dialog_files, train_responses, train_bs_kb = gen_dataset_joint('train')
-val, val_counter, val_hierarchial_actvecs, val_dialog_files, val_responses, val_bs_kb = gen_dataset_joint('val')
-test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses, test_bs_kb =gen_dataset_joint('test')
+train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = gen_dataset_joint('train')
+val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses = gen_dataset_joint('val')
+test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses =gen_dataset_joint('test')
 
 max_sent_len = 50
 
@@ -507,6 +514,7 @@ print('length of vocab: ', vocab_size)
 # print(idxtoword)
 
 ntokens=len(wordtoidx)
+
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
 
@@ -516,10 +524,8 @@ def run(args, optuna_callback=None):
 
 	if args.model_type=="action_pred":
 		log_path ='running/action_pred/'
-	elif args.model_type=="SET++":
-		log_path ='running/transformer_set++/'
-	elif args.model_type=="HIER++":
-		log_path ='running/transformer_hier++/'
+	elif args.model_type=="joint":
+		log_path ='running/transformer_joint/'
 	else:
 		print('Invalid model type')
 		raise ValueError
@@ -555,12 +561,11 @@ def run(args, optuna_callback=None):
 
 	ntokens=len(wordtoidx)
 
-
 	if args.model_type=="action_pred":
 		model = Action_predictor(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.dropout)
 		criterion = nn.BCELoss()
 	else:
-		model = Transformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
+		model = Joint_model(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
 		criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 	seed = 123
@@ -583,16 +588,17 @@ def run(args, optuna_callback=None):
 
 	logger.debug('\n\n\n=====>\n')
 
+	if args.model_type=="action_pred":
+		# Train only action prediction
+		load_model(model, 'checkpoint_ap.pt')
+		train_action_pred(model, args, criterion, optimizer, scheduler)
+		evaluate_action_pred(model, args, criterion, optimizer, scheduler, 'test')
+		return
 
-	load_model(model, 'checkpoint_ap.pt')
-	train_action_pred(model, args, criterion, optimizer, scheduler)
-	evaluate_action_pred(model, args, criterion, optimizer, scheduler, 'test')
-
-	return
 
 	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
-	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
+	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	# logger.debug('Testing model\n')
 	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
@@ -621,7 +627,7 @@ if __name__ == '__main__':
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
 	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
 
-	parser.add_argument("-model", "--model_type", default="SET++", help="Give model name one of [SET++, HIER++]")
+	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [SET++, HIER++]")
 
 	args = parser.parse_args()
 	run(args)

@@ -17,6 +17,13 @@ domains = ['restaurant', 'hotel', 'attraction', 'train', 'taxi', 'hospital', 'po
 functions = ['inform', 'request', 'recommend', 'book', 'select', 'sorry', 'none']
 arguments = ['pricerange', 'id', 'address', 'postcode', 'type', 'food', 'phone', 'name', 'area', 'choice',  'price', 'time', 'reference', 'none', 'parking', 'stars', 'internet', 'day', 'arriveby', 'departure', 'destination', 'leaveat', 'duration', 'trainid', 'people', 'department', 'stay']
 
+V_domain = ['PAD', 'SOS', 'EOS']+ domains
+V_slots = ['PAD', 'SOS', 'EOS']+ arguments
+V_actions = ['PAD', 'SOS', 'EOS']+ functions
+V_domains_wtoi = dict((el,i) for i,el in enumerate(V_domain))
+V_slots_wtoi = dict((el,i) for i,el in enumerate(V_slots))
+V_actions_wtoi = dict((el,i) for i,el in enumerate(V_actions))
+
 used_levels = domains + functions + arguments
 #used_levels = functions + arguments
 act_len = len(used_levels)

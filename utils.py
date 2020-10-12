@@ -12,7 +12,7 @@ import gc
 import  os, sys
 from datetime import datetime
 from collections import Counter
-
+import Constants
 
 max_sent_len = 50
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -63,19 +63,19 @@ def data_gen(dataset, batch_size, i, wordtoidx):
     max_dial_len = len(dataset[i])-1
 #     upper_bound = min(i+batch_size, len(dataset))
     upper_bound = i+batch_size
-    vectorised_seq = []
+    tokenized_seq = []
 
     for d in dataset[i:upper_bound]:
 #         print(len(d), end=' ')
-        vectorised_seq.append([[wordtoidx.get(word, 1) for word in tokenize_en(sent)] for sent in d])
+        tokenized_seq.append([[wordtoidx.get(word, 1) for word in tokenize_en(sent)] for sent in d])
 
-    seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in vectorised_seq])
+    seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in tokenized_seq])
     seq_tensor = torch.zeros(batch_size, max_dial_len, max_sent_len, device=device)
 
     target_tensor = torch.zeros(batch_size, max_sent_len, device=device)
     label_tensor = torch.zeros(batch_size, max_sent_len, device=device)
 
-    for idx,(seq, seqlen) in enumerate(zip(vectorised_seq, seq_lengths)):
+    for idx,(seq, seqlen) in enumerate(zip(tokenized_seq, seq_lengths)):
         for i in range(seqlen-1):
             seq_tensor[idx, i, :len(seq[i])] = torch.LongTensor(seq[i])
         target_tensor[idx, :len(seq[seqlen-1])] = torch.LongTensor(seq[seqlen-1]) # last sentence in dialog
@@ -111,52 +111,68 @@ def data_loader(dataset, dataset_counter, batch_size, wordtoidx):
 
 
 # class batch from annotated transformer with acts
-def data_gen_acts(dataset, act_vecs, batch_size, i, wordtoidx):
+def data_gen_acts(dataset, dataset_bs, dataset_da, batch_size, i, wordtoidx):
     # print(i, len(dataset))
     max_dial_len = len(dataset[i])-1
 
     upper_bound = i+batch_size
-    vectorised_seq = []
-    for d in dataset[i:upper_bound]:
+    tokenized_seq = []
+    tokenized_bs = []
+    tokenized_da = []
+    bs_output = []
+    da_output = []
+    for d, bs, da in zip(dataset[i:upper_bound], dataset_bs[i:upper_bound], dataset_da[i:upper_bound]):
 #         print(len(d), end=' ')
-        vectorised_seq.append([[wordtoidx.get(word, 1) for word in tokenize_en(sent)] for sent in d])
+        tokenized_seq.append([[wordtoidx.get(word, 1) for word in tokenize_en(sent)] for sent in d])
+        tokenized_bs.append([wordtoidx.get(word, 1) for word in tokenize_en(bs)])
+        tokenized_da.append([wordtoidx.get(word, 1) for word in tokenize_en(da)])
+        bs_output.extend(bs.split()) # combine for all samples, split later
+        da_output.extend(da.split())
 
-    batch_actvecs = torch.tensor(act_vecs[i:upper_bound], device=device)
+    bs_output=[[Constants.V_domains_wtoi[w] for w in bs_output[::2]], 
+               [Constants.V_slots_wtoi[w] for w in bs_output[1::2]]]
+    # 2, batch_size, 25
+    bs_output = torch.tensor(bs_output, device=device).reshape(2, batch_size, -1)
 
-    seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in vectorised_seq])
+    da_output=[[Constants.V_domains_wtoi[w] for w in da_output[::3]], 
+               [Constants.V_actions_wtoi[w] for w in da_output[1::3]],
+               [Constants.V_slots_wtoi[w] for w in da_output[2::3]] ]
+    # 3, batch_size, 17
+    da_output = torch.tensor(da_output, device=device).reshape(3, batch_size, -1)
+
+    seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in tokenized_seq])
     seq_tensor = torch.zeros(batch_size, max_dial_len, max_sent_len, device=device)
 
     target_tensor = torch.zeros(batch_size, max_sent_len, device=device)
     label_tensor = torch.zeros(batch_size, max_sent_len, device=device)
 
-    for idx,(seq, seqlen) in enumerate(zip(vectorised_seq, seq_lengths)):
+    bs_tensor = torch.tensor(tokenized_bs, device=device).transpose(0,1) # 50, batch_size
+    da_tensor = torch.tensor(tokenized_da, device=device).transpose(0,1) # 51, batch_size
+
+    for idx,(seq, seqlen) in enumerate(zip(tokenized_seq, seq_lengths)):
         for i in range(seqlen-1):
             seq_tensor[idx, i, :len(seq[i])] = torch.LongTensor(seq[i])
-        target_tensor[idx, :len(seq[seqlen-1])] = torch.LongTensor(seq[seqlen-1]) # last sentence in dialog
-        label_tensor[idx, :len(seq[seqlen-1])-1] = torch.LongTensor(seq[seqlen-1][1:]) # last sentence in dialog from first word, ie without sos
+        # last sentence in dialog
+        target_tensor[idx, :len(seq[seqlen-1])] = torch.LongTensor(seq[seqlen-1]) 
+        # last sentence in dialog from first word, ie without sos
+        label_tensor[idx, :len(seq[seqlen-1])-1] = torch.LongTensor(seq[seqlen-1][1:]) 
     
     seq_tensor = seq_tensor.transpose(1,2).reshape(batch_size, -1).transpose(0,1)
     # seq_tensor - (msl*mdl , bs)
-
     target_tensor = target_tensor.transpose(0,1)
     label_tensor = label_tensor.transpose(0,1)
-    batch_actvecs = batch_actvecs.transpose(0,1)
 
-    # print(batch_actvecs.shape)
-    
-    return seq_tensor.long(), target_tensor.long(), label_tensor.long(), batch_actvecs.float()
+    return seq_tensor.long(), target_tensor.long(), label_tensor.long(), bs_tensor.long(), da_tensor.long(), bs_output.long(), da_output.long()
 
 
-def data_loader_acts(dataset, dataset_counter, act_vecs, batch_size, wordtoidx): 
+def data_loader_acts(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, wordtoidx): 
     # return batches according to dialog len, -> all similar at once
     # do mask also for these
     prev=0
     for dial_len, val in dataset_counter.items():
-    #    if val<2:
-    #        continue
         for i in range(prev, prev+val, batch_size):
 #             print(i, min(batch_size, prev+val-i))
-            yield data_gen_acts(dataset, act_vecs, min(batch_size, prev+val-i), i, wordtoidx)
+            yield data_gen_acts(dataset, dataset_bs, dataset_da, min(batch_size, prev+val-i), i, wordtoidx)
         #     break # uncomment both break stats to run for 1 batch for SET++,HIER++ models
         # break
         prev += val
@@ -169,11 +185,11 @@ def data_gen_action_pred(dataset, belief_states, act_vecs, batch_size, i, wordto
     max_dial_len = len(dataset[i])-1
 
     upper_bound = i+batch_size
-    vectorised_seq = []
+    tokenized_seq = []
     tokenized_bs = []
 
     for d in dataset[i:upper_bound]:
-        vectorised_seq.append([wordtoidx.get(word, 1) for word in tokenize_en(d[-1])])
+        tokenized_seq.append([wordtoidx.get(word, 1) for word in tokenize_en(d[-1])])
 
     for bs in belief_states[i:upper_bound]:
         tokenized_bs.append([wordtoidx.get(word, 1) for word in tokenize_en(bs)])
@@ -182,7 +198,7 @@ def data_gen_action_pred(dataset, belief_states, act_vecs, batch_size, i, wordto
     seq_tensor = torch.zeros(batch_size, max_sent_len, device=device)
     bs_tensor = torch.zeros(batch_size, max_sent_len, device=device)
 
-    for idx, (seq, bs) in enumerate(zip(vectorised_seq, tokenized_bs)):
+    for idx, (seq, bs) in enumerate(zip(tokenized_seq, tokenized_bs)):
         seq_tensor[idx, :len(seq)] = torch.LongTensor(seq)
         bs_tensor[idx, :len(bs)] = torch.LongTensor(bs)
 
