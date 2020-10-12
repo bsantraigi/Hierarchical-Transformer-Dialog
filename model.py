@@ -54,14 +54,13 @@ def post_process(output_max): # keeps till eos, after that all changed to pad
 		for idx,e in enumerate(mask_len):
 			mask_values.extend(range(idx*output_max.shape[1], e + idx*output_max.shape[1]))
 	except:
-		print('error here ', e)
+		print('Response post-process error ', e)
 		print(mask_len)
 		
 	mask =  torch.zeros((output_max.reshape(-1).shape[0]), device=device)
 	mask[mask_values]=1
 	mask = mask.view(*output_max.shape)
 	output_max = output_max * mask
-#     output = output  # to do? - (bs, msl, embed) - replace with pad embeddings after first eos
 	return output_max
 
 def collect_active_part(beamed_tensor, curr_active_inst_idx, n_prev_active_inst, n_bm):

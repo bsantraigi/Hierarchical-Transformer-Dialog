@@ -20,6 +20,7 @@ from tqdm import tqdm
 from dataset import *
 from utils import *
 from model import *
+from joint_model import *
 from metrics import *
 from collections import OrderedDict
 from evaluate import evaluateModel
@@ -85,14 +86,24 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	accumulated_steps = 3
 	optimizer.zero_grad()
 
-	for i, (data, targets, labels, bs, da, bs_output, da_output) in enumerate(data_loader_acts(train, train_counter, train_bs, train_dialog_act, batch_size, wordtoidx)):
+	for i, (data, targets, labels, bs, da, bs_target, da_target) in enumerate(data_loader_acts(train, train_counter, train_bs, train_dialog_act, batch_size, wordtoidx)):
 
 		batch_size_curr = data.shape[1]
 		# optimizer.zero_grad()
-		output = model(data, targets, act_vecs)
+		output, bs_output , da_output = model(data, bs, da, targets)
 
-		cur_loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
-			
+		print(bs_target[0].shape, da_target[0].shape)
+		print(bs_output[0].shape, da_output[0].shape)
+
+		response_loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
+
+		belief_loss=criterion(bs_output[0].view(-1, len(Constants.V_domains)), bs_target[0].view(-1))+criterion(bs_output[1].view(-1, len(Constants.V_slots)), bs_target[1].view(-1))
+
+		da_loss=criterion(da_output[0].view(-1, len(Constants.V_domains)), da_target[0].view(-1))  + criterion(da_output[1].view(-1, len(Constants.V_actions)), da_target[1].view(-1))  + criterion(da_output[2].view(-1, len(Constants.V_slots)), da_target[2].view(-1))
+		
+		# print(response_loss, belief_loss, da_loss)	
+		cur_loss = response_loss+belief_loss+da_loss
+
 		loss = cur_loss / accumulated_steps
 		loss.backward()
 	
@@ -565,7 +576,7 @@ def run(args, optuna_callback=None):
 		model = Action_predictor(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.dropout)
 		criterion = nn.BCELoss()
 	else:
-		model = Joint_model(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
+		model = Joint_model(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
 		criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 	seed = 123

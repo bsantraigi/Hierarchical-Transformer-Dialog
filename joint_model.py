@@ -8,6 +8,44 @@ import Constants
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # print(device)
 
+def _gen_mask_sent(sz):
+	mask = ((torch.triu(torch.ones(sz, sz, device=device)) == 1) * 1.0).transpose(0,1)
+	mask = mask.float().masked_fill(mask==0, float('-inf')).masked_fill(mask==1, 0)    
+	return mask
+
+def _gen_mask_hierarchical(src_len, tgt_len):        
+    t = torch.zeros(src_len, src_len, device=device)
+    f = torch.ones(tgt_len, tgt_len, device=device)
+    for i in range(0, src_len, tgt_len):
+        t[i:i+tgt_len, i:i+tgt_len]=f
+        t[i:i+tgt_len, -tgt_len:] = f
+    t = t.float().masked_fill(t==0, float('-inf')).masked_fill(t==1, 0)
+    return t
+
+class PositionalEncoding(nn.Module):
+	def __init__(self, d_model, dropout, max_len= 5000):
+		super(PositionalEncoding, self).__init__()
+		self.dropout = nn.Dropout(p=dropout)
+		pe = torch.zeros(max_len, d_model)
+		position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)#size = (max_len, 1)
+		
+		if d_model%2==0:
+			div_term = torch.exp(torch.arange(0, d_model,2).float() * (-math.log(10000.0)/d_model))
+			pe[:, 0::2] = torch.sin(position * div_term)
+			pe[:, 1::2] = torch.cos(position*div_term)
+		else:
+			div_term = torch.exp(torch.arange(0, d_model+1, 2).float() * (-math.log(10000.0)/d_model))
+			pe[:, 0::2] = torch.sin(position * div_term)
+			pe[:, 1::2] = torch.cos(position * div_term[:-1])
+
+		pe = pe.unsqueeze(1) # size - (max_len, 1, d_model)
+		self.register_buffer('pe', pe)
+		# print('POS ENC. :', pe.size()) # 5000,1,embed_size
+	
+	def forward(self, x): # 1760xbsxembed
+		x = x+self.pe[:x.size(0), :, :].repeat(1, x.size(1), 1)
+		return self.dropout(x)
+
 
 class Joint_model(nn.Module):
 	def __init__(self, ntoken, ninp, nhead, nhid, nlayers_e1, nlayers_e2, nlayers_d, dropout):
@@ -37,7 +75,11 @@ class Joint_model(nn.Module):
 		
 		self.ninp = ninp
 
-		self.act_embedding = nn.Linear(44, self.ninp)		
+		self.linear_d = nn.Linear(self.ninp, len(Constants.V_domains))
+		self.linear_s = nn.Linear(self.ninp, len(Constants.V_slots))
+		self.linear_a = nn.Linear(self.ninp, len(Constants.V_actions))
+
+		self.mask_func = _gen_mask_hierarchical
 		# self.max_sent_len = tgt_mask.size(0)
 		self._reset_parameters()
 
@@ -83,37 +125,37 @@ class Joint_model(nn.Module):
 
 		# encoder 2
 		memory_inter = self.pos_encoder(memory_inter) # mdl*msl, bs, embed
-		memory = self.transformer_encoder_sent(memory_inter, src_mask_sent, src_pad_mask_sent) 
+		memory = self.transformer_encoder_sent(memory_inter, src_mask_sent, src_pad_mask_sent)
 
 		# Belief state decoder
 		# Belief state:  #[belief start, domain slot_name, .., belief end] - msl, bs
 		bs_mask = _gen_mask_sent(belief.shape[0])
 		bs_pad_mask = (belief==0).transpose(0,1)
-		belief = self.WHICH_encoder(belief)*math.sqrt(self.ninp) # 2*max_triplets, bs, embed
-		# belief = self.pos_encoder(belief)
+		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*max_triplets, bs, embed
 		pred_belief = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask) # 2*max_triplets, bs, embed
 		pred_belief = pred_belief.transpose(0,1).reshape(batch_size, -1, 2*self.ninp)
-		pred_belief_domains = self.linear1(pred_belief[:,:,0]) # bs, max_triplets, Vdomain
-		pred_belief_slots = self.linear2(pred_belief[:,:,1]) # bs, max_triplets, Vslots
-		out_belief = torch.stack([pred_belief_domains, pred_belief_slots], dim=-1)
+		
+		pred_belief_domains = self.linear_d(pred_belief[:,:, :self.ninp]) # bs, max_triplets, Vdomain
+		pred_belief_slots = self.linear_s(pred_belief[:,:, self.ninp: ]) # bs, max_triplets, Vslots
+		out_belief = [pred_belief_domains, pred_belief_slots]
 
 		# Dialog Act decoder
 		da_mask = _gen_mask_sent(da.shape[0])
 		da_pad_mask = (da==0).transpose(0,1)
-		da = self.WHICH_encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
-		da = self.pos_encoder(da)
-		pred_da = self.da_decoder(da, torch.stack([memory,belief]) , tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)
-		pred_da = pred_belief.transpose(0,1).reshape(batch_size, -1, 3*self.ninp)
-		pred_da_domains = self.linear1(pred_da[:,:,0]) # bs, max_triplets, Vdomain
-		pred_da_actions = self.linear3(pred_da[:,:,1]) # bs, max_triplets, Vactions
-		pred_da_slots = self.linear2(pred_da[:,:,2]) # bs, max_triplets, Vslots
-		out_da = torch.stack([pred_da_domains, pred_da_actions, pred_da_slots], dim=-1)
+		da = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
+		pred_da = self.da_decoder(da, torch.cat([memory,belief]) , tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)
+
+		pred_da = pred_da.transpose(0,1).reshape(batch_size, -1, 3*self.ninp)
+		pred_da_domains = self.linear_d(pred_da[:,:,:self.ninp]) # bs, max_triplets, Vdomain
+		pred_da_actions = self.linear_a(pred_da[:,:,self.ninp:2*self.ninp]) # bs, max_triplets, Vactions
+		pred_da_slots = self.linear_s(pred_da[:,:,2*self.ninp:]) # bs, max_triplets, Vslots
+		out_da = [pred_da_domains, pred_da_actions, pred_da_slots]
 
 		# Response decoder - 
 		# tgt shape - (msl, batch_size, embed)- add act_vec of (None ,bs,embed)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
 		tgt = self.pos_encoder(tgt)
-		output = self.response_decoder(tgt, memory, tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
+		output = self.response_decoder(tgt, torch.cat([memory, belief, da]), tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
 		output = self.decoder(output)
 		return output, out_belief, out_da
 
