@@ -199,7 +199,7 @@ def evaluateModel_Slow(dialogues, mode='valid'):
                      'hospital': [0, 0, 0], 'police': [0, 0, 0]}
 
     filenames = sorted(dialogues.keys())
-    all_stats = []
+    all_stats = {}
     for filename in filenames:
         dial = dialogues[filename]
         if filename not in delex_dialogues:
@@ -209,7 +209,7 @@ def evaluateModel_Slow(dialogues, mode='valid'):
 
         # print(dial, '\n',  data)
         success, match, stats = evaluateDialogue(dial, data)
-        all_stats.append((match, success))
+        all_stats[filename] = (match, success)
 
         successes += success
         matches += match
