@@ -95,12 +95,11 @@ class Joint_model(nn.Module):
 		self.encoder.weight.data.uniform_(-initrange, initrange)
 		self.decoder.bias.data.zero_()
 		self.decoder.weight.data.uniform_(-initrange, initrange)
-	
-	def forward(self, src, belief, da, tgt):
+
+	def compute_encoder_output(self, src):
 		max_sent_len = 50
 		src_mask = torch.zeros(max_sent_len,max_sent_len, device=device)
-		tgt_mask = _gen_mask_sent(tgt.shape[0])		
-		batch_size = tgt.shape[1]
+		batch_size = src.shape[1]
 		
 		max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
 		
@@ -111,9 +110,7 @@ class Joint_model(nn.Module):
 		src_mask_sent = self.mask_func(max_dial_len*max_sent_len, max_sent_len)
 
 		src = src.reshape(max_sent_len, -1)
-
 		src_pad_mask = (src==0).transpose(0,1)
-		tgt_pad_mask = (tgt==0).transpose(0,1)
 
 		src = self.encoder(src) * math.sqrt(self.ninp)
 		src = self.pos_encoder(src)
@@ -126,6 +123,16 @@ class Joint_model(nn.Module):
 		# encoder 2
 		memory_inter = self.pos_encoder(memory_inter) # mdl*msl, bs, embed
 		memory = self.transformer_encoder_sent(memory_inter, src_mask_sent, src_pad_mask_sent)
+		return memory
+	
+	def forward(self, src, belief, da, tgt):
+		max_sent_len = 50
+		batch_size = tgt.shape[1]
+
+		tgt_mask = _gen_mask_sent(tgt.shape[0])		
+		tgt_pad_mask = (tgt==0).transpose(0,1)
+
+		memory = self.compute_encoder_output(src)
 
 		# Belief state decoder
 		# Belief state:  #[belief start, domain slot_name, .., belief end] - msl, bs
@@ -152,33 +159,120 @@ class Joint_model(nn.Module):
 		out_da = [pred_da_domains, pred_da_actions, pred_da_slots]
 
 		# Response decoder - 
-		# tgt shape - (msl, batch_size, embed)- add act_vec of (None ,bs,embed)
+		# tgt shape - (msl, batch_size, embed)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
 		tgt = self.pos_encoder(tgt)
 		output = self.response_decoder(tgt, torch.cat([memory, belief, da]), tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
 		output = self.decoder(output)
 		return output, out_belief, out_da
 
+	def decode_belief_state(self, belief, memory): # pass curr_belief - 2*L, bs
+		batch_size = belief.shape[1]
+		bs_mask = _gen_mask_sent(belief.shape[0])
+		bs_pad_mask = (belief==0).transpose(0,1)
+
+		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*triplets, bs, embed
+		pred_belief = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask) # 2*max_triplets, bs, embed
+		pred_belief = pred_belief.transpose(0,1).reshape(batch_size, -1, 2*self.ninp)
+		
+		pred_belief_domains=self.linear_d(pred_belief[:,-1, :self.ninp]).unsqueeze(0) #1, bs, Vdomain
+		pred_belief_slots = self.linear_s(pred_belief[:,-1, self.ninp:]).unsqueeze(0) #1, bs, Vslots
+
+		belief_logits = [pred_belief_domains, pred_belief_slots]
+		pred_belief = torch.cat([torch.max(pred_belief_domains,dim=2)[1], torch.max(pred_belief_slots,dim=2)[1]]) # 2, 32
+		return pred_belief, belief_logits
+
+	def decode_dialog_act(self, da, belief, memory):
+		batch_size = da.shape[1]
+		da_mask = _gen_mask_sent(da.shape[0])
+		da_pad_mask = (da==0).transpose(0,1)
+		da = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
+		pred_da = self.da_decoder(da, torch.cat([memory,belief]), tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)
+
+		pred_da = pred_da.transpose(0,1).reshape(batch_size, -1, 3*self.ninp)
+		pred_da_domains = self.linear_d(pred_da[:,-1,:self.ninp]).unsqueeze(0) # 1,bs, Vdomain
+		pred_da_actions = self.linear_a(pred_da[:,-1,self.ninp:2*self.ninp]).unsqueeze(0) # 1,bs, Vactions
+		pred_da_slots = self.linear_s(pred_da[:,-1,2*self.ninp:]).unsqueeze(0) # 1,bs, Vslots
+		pred_logits = [pred_da_domains, pred_da_actions, pred_da_slots]
+
+		pred_da = torch.cat([torch.max(pred_da_domains,dim=2)[1], torch.max(pred_da_actions, dim=2)[1], torch.max(pred_da_slots,dim=2)[1]]) # 2, 32
+
+		return pred_da, pred_logits
+
+	def decode_response(self, memory, belief, da, tgt):
+		# tgt shape - (msl, batch_size, embed)
+		tgt_mask = _gen_mask_sent(tgt.shape[0])		
+		tgt_pad_mask = (tgt==0).transpose(0,1)
+		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
+		tgt = self.pos_encoder(tgt)
+		output = self.response_decoder(tgt, torch.cat([memory, belief, da]), tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
+		output = self.decoder(output)[-1,:,:].unsqueeze(0)
+		output_max = torch.max(output, dim=2)[1]
+		return output, output_max
 
 	def greedy_search(self, src, batch_size):
+		# Index 2 is SOS, index 3 is EOS in all vocabs
 		max_sent_len = 50
 		max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
+
 		tgt = 2*torch.ones(1, batch_size , device=device).long()
 		eos_tokens = 3*torch.ones(1, batch_size, device=device).long()
+		belief = 2*torch.ones(2, batch_size , device=device).long() # 2, bs
+		belief_eos = 3*torch.ones(2, batch_size , device=device).long()
+		da = 2*torch.ones(3, batch_size , device=device).long() # 3, bs
 
-		_, belief, da = self.forward(src)
+		memory = self.compute_encoder_output(src)
+
+		# Generate belief state
+		for i in range(1, max_sent_len//2): # predict 48 words + sos+eos=50
+			cur_belief, cur_logits = self.decode_belief_state(belief, memory)
+			if i==1:
+				belief_logits = [cur_logits[0], cur_logits[1]]
+			else:
+				belief_logits[0] = torch.cat([belief_logits[0], cur_logits[0]])
+				belief_logits[1] = torch.cat([belief_logits[1], cur_logits[1]])
+			belief = torch.cat([belief, cur_belief])
+
+		# belief - [50, 32], belief_logits - each ele - ([24, 32, V_d/a/s]) 
+		# - while computing bs loss remove SOS in belief targets with logits.
+
+		# belief = torch.cat([belief, belief_eos]) # should I append EOS at end?
+
+		bs_mask = _gen_mask_sent(belief.shape[0])
+		bs_pad_mask = (belief==0).transpose(0,1)
+		belief_memory = self.encoder(belief)*math.sqrt(self.ninp) # 2*max_triplets, bs, embed
+
+		# Generate dialog act
+		for i in range(1, (max_sent_len+1)//3):
+			cur_da, cur_logits = self.decode_dialog_act(da, belief_memory, memory)
+			if i==1:
+				da_logits = [cur_logits[0], cur_logits[1], cur_logits[2]]
+			else:
+				da_logits[0] = torch.cat([da_logits[0], cur_logits[0]])
+				da_logits[1] = torch.cat([da_logits[1], cur_logits[1]])
+				da_logits[2] = torch.cat([da_logits[2], cur_logits[2]])
+			da = torch.cat([da, cur_da])
+
+		# da - [51, 32], da_logits - each ele - ([16, 32, V_d/a/s]) 
+		# da = torch.cat([da, eos_tokens])
+
+		da_mask = _gen_mask_sent(da.shape[0])
+		da_pad_mask = (da==0).transpose(0,1)
+		da_memory = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
+
+		# Generate response
 		for i in range(1, max_sent_len+1): # predict 48 words + sos+eos=50
-			output, _, _ = self.forward(src, belief, da, tgt)[-1,:,:].unsqueeze(0)
+			output, output_max = self.decode_response(memory, belief_memory, da_memory, tgt)
 			# print('output ', output.shape) # i, bs, vocab
 			if i==1:
 				logits = output
 			else:
 				logits = torch.cat([logits, output], dim=0)
-			output_max = torch.max(output, dim=2)[1]
+			
 			tgt = torch.cat([tgt, output_max], dim=0)
 
 		tgt = torch.cat([tgt[:49,:], eos_tokens], dim=0)
-		return logits, tgt
+		return logits, tgt, belief_logits, belief, da_logits, da
 
 		
 	def translate_batch(self, src, act_vecs, n_bm, batch_size): # , src_pad_mask, tgt_pad_mask
