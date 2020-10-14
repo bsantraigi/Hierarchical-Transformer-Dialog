@@ -28,7 +28,7 @@ def compute_bs_accuracy(pred, act):
 
 	temp = (total_actual==pred_l)*mask # N, triplets, 2
 	tp = (temp[:,:,0]*temp[:,:,1]).cpu().numpy().sum()
-	total = np.count_nonzero(total_actual*mask)
+	total = np.count_nonzero((total_actual*mask).cpu().numpy())
 	joint_acc = (2*tp)/total #/2 as each triplet is counted twice
 
 	slot_acc = temp.sum().cpu().numpy()/total
@@ -61,7 +61,7 @@ def compute_da_metrics(pred, act): # begin from first triplet(no sos)
 
 	temp = act==pred
 	tp = (temp[:,:,0]*temp[:,:,1]*temp[:,:,2]).cpu().numpy().sum()
-	total = np.count_nonzero(act*mask)
+	total = np.count_nonzero((act*mask).cpu().numpy())
 	joint_acc = (3*tp)/total
 	slot_acc = temp.sum().cpu().numpy()/total
 	return (joint_acc, slot_acc), (precision, recall, f1_score)
