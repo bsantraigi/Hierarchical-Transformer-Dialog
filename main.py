@@ -145,9 +145,9 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 	elapsed = time.time()-start_time
 
 	total_loss /= len(dataset)
-	total_response_loss /= len(train)
-	total_bs_loss /=len(train)
-	total_da_loss /= len(train)
+	total_response_loss /= len(dataset)
+	total_bs_loss /=len(dataset)
+	total_da_loss /= len(dataset)
 
 	logger.debug('==>{} \tResp Loss: {:0.3f} BS Loss: {:0.3f} DA Loss: {:0.3f}\tTotal loss {:0.3f}\tTime {:0.0f}s'.format(split, total_response_loss, total_bs_loss, total_da_loss, total_loss, elapsed))
 
