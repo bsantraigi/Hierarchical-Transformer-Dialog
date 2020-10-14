@@ -132,13 +132,13 @@ def data_gen_acts(dataset, dataset_bs, dataset_da, batch_size, i, wordtoidx):
     bs_output=[[Constants.V_domains_wtoi[w] for w in bs_output[::2]], 
                [Constants.V_slots_wtoi[w] for w in bs_output[1::2]]]
     # 2, batch_size, 25
-    bs_output = torch.tensor(bs_output, device=device).reshape(2, batch_size, -1)
+    bs_output = torch.tensor(bs_output, device=device).reshape(2, batch_size, -1).transpose(1,2)
 
     da_output=[[Constants.V_domains_wtoi[w] for w in da_output[::3]], 
                [Constants.V_actions_wtoi[w] for w in da_output[1::3]],
                [Constants.V_slots_wtoi[w] for w in da_output[2::3]] ]
     # 3, batch_size, 17
-    da_output = torch.tensor(da_output, device=device).reshape(3, batch_size, -1)
+    da_output = torch.tensor(da_output, device=device).reshape(3, batch_size, -1).transpose(1,2)
 
     seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in tokenized_seq])
     seq_tensor = torch.zeros(batch_size, max_dial_len, max_sent_len, device=device)

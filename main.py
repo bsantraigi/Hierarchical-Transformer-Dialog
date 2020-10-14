@@ -70,12 +70,13 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	for i, (data, targets, labels, bs, da, bs_target, da_target) in enumerate(data_loader_acts(train, train_counter, train_bs, train_dialog_act, batch_size, wordtoidx)):
 
 		batch_size_curr = data.shape[1]
-		# optimizer.zero_grad()
+		# optimizer.zero_grad()		
 		output, bs_logits , da_logits = model(data, bs, da, targets)
 
 		response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
-		# TODO: bs_logits - ?,  bs_target[0] - 32, V
+		# bs_logits - triplets, bs, V,  bs_target[0] - triplets, bs
+
 		belief_loss=criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1))+criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
 
 		da_loss=criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
@@ -189,10 +190,10 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 				response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1)).item()
 
-				bs_loss = criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].transpose(0,1)[1:].reshape(-1))+criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].transpose(0,1)[1:].reshape(-1))
+				bs_loss = criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0][1:].reshape(-1))+criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1][1:].reshape(-1))
 				bs_loss = bs_loss.item()
 
-				da_loss = criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].transpose(0,1)[1:].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].transpose(0,1)[1:].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].transpose(0,1)[1:].reshape(-1))
+				da_loss = criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0][1:].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1][1:].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2][1:].reshape(-1))
 				da_loss = da_loss.item()
 
 				cur_loss = response_loss+bs_loss+da_loss
@@ -209,22 +210,23 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 				if i==0:
 					hyp = output_max
 					ref = targets.transpose(0,1)
+
 					bs_pred=bs_output[2:].transpose(0,1) # bs, 48
-					bs_act = [bs_target[0][:, 1:], bs_target[1][:, 1:]]#bs,24 | bs,24
+					bs_act = [bs_target[0][1:].transpose(0,1), bs_target[1][1:].transpose(0,1)] #bs,24 | bs,24
 					da_pred = da_output[3:].transpose(0,1) # bs, 48
-					da_act = [da_target[0][:,1:], da_target[1][:, 1:], da_target[2][:, 1:]]
+					da_act = [da_target[0][1:].transpose(0,1), da_target[1][1:].transpose(0,1), da_target[2][1:].transpose(0,1)]
 				else:
 					hyp = torch.cat((hyp, output_max), dim=0)
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
 					bs_pred= torch.cat([bs_pred, bs_output[2:].transpose(0,1)])
-					bs_act[0] = torch.cat([bs_act[0], bs_target[0][:, 1:]])
-					bs_act[1] = torch.cat([bs_act[1], bs_target[1][:, 1:]])
+					bs_act[0] = torch.cat([bs_act[0], bs_target[0][1:].transpose(0,1)])
+					bs_act[1] = torch.cat([bs_act[1], bs_target[1][1:].transpose(0,1)])
 
 					da_pred=torch.cat([da_pred, da_output[3:].transpose(0,1)])
-					da_act[0]=torch.cat([da_act[0], da_target[0][:, 1:]])
-					da_act[1]=torch.cat([da_act[1], da_target[1][:, 1:]])
-					da_act[2]=torch.cat([da_act[2], da_target[2][:, 1:]])
+					da_act[0]=torch.cat([da_act[0], da_target[0][1:].transpose(0,1)])
+					da_act[1]=torch.cat([da_act[1], da_target[1][1:].transpose(0,1)])
+					da_act[2]=torch.cat([da_act[2], da_target[2][1:].transpose(0,1)])
 
 			else: # beam search
 				if i==0:
@@ -334,7 +336,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 			save_model(model, args, 'checkpoint.pt', train_loss, val_loss_ground, -1)
 			continue
 
-		_, val_bleu, val_f1entity, matches, successes = evaluate(model, args, val, val_counter, val_hierarchial_actvecs, args.batch_size, criterion, 'val', method='greedy')
+		_, val_bleu, val_f1entity, matches, successes = evaluate(model, args, val, val_counter, val_bs, val_dialog_act , args.batch_size, criterion, 'val', method='greedy')
 		val_criteria = val_bleu+0.5*matches+0.5*successes
 
 		if optuna_callback is not None:
@@ -564,11 +566,11 @@ def run(args, optuna_callback=None):
 
 	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
 	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
+	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
-	# logger.debug('Testing model\n')
-	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+	logger.debug('Testing model\n')
+	_,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)

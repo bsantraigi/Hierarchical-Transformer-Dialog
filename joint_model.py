@@ -140,10 +140,10 @@ class Joint_model(nn.Module):
 		bs_pad_mask = (belief==0).transpose(0,1)
 		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*max_triplets, bs, embed
 		pred_belief = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask) # 2*max_triplets, bs, embed
-		pred_belief = pred_belief.transpose(0,1).reshape(batch_size, -1, 2*self.ninp)
+		pred_belief = pred_belief.transpose(0,1).reshape(batch_size, -1, 2*self.ninp).transpose(0,1) # max_triplets, bs, 2*embed
 		
-		pred_belief_domains = self.linear_d(pred_belief[:,:, :self.ninp]) # bs, max_triplets, Vdomain
-		pred_belief_slots = self.linear_s(pred_belief[:,:, self.ninp: ]) # bs, max_triplets, Vslots
+		pred_belief_domains = self.linear_d(pred_belief[:,:, :self.ninp]) # max_triplets,bs, Vdomain
+		pred_belief_slots = self.linear_s(pred_belief[:,:, self.ninp: ]) # max_triplets, bs, Vslots
 		out_belief = [pred_belief_domains, pred_belief_slots]
 
 		# Dialog Act decoder
@@ -152,10 +152,10 @@ class Joint_model(nn.Module):
 		da = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
 		pred_da = self.da_decoder(da, torch.cat([memory,belief]) , tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)
 
-		pred_da = pred_da.transpose(0,1).reshape(batch_size, -1, 3*self.ninp)
-		pred_da_domains = self.linear_d(pred_da[:,:,:self.ninp]) # bs, max_triplets, Vdomain
-		pred_da_actions = self.linear_a(pred_da[:,:,self.ninp:2*self.ninp]) # bs, max_triplets, Vactions
-		pred_da_slots = self.linear_s(pred_da[:,:,2*self.ninp:]) # bs, max_triplets, Vslots
+		pred_da = pred_da.transpose(0,1).reshape(batch_size, -1, 3*self.ninp).transpose(0,1) # max_triplets, bs, 3
+		pred_da_domains = self.linear_d(pred_da[:,:,:self.ninp]) # max_triplets, bs, Vdomain
+		pred_da_actions = self.linear_a(pred_da[:,:,self.ninp:2*self.ninp]) #max_triplets, bs Vactions
+		pred_da_slots = self.linear_s(pred_da[:,:,2*self.ninp:]) # max_triplets, bs, Vslots
 		out_da = [pred_da_domains, pred_da_actions, pred_da_slots]
 
 		# Response decoder - 
