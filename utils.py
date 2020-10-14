@@ -173,7 +173,7 @@ def data_loader_acts(dataset, dataset_counter, dataset_bs, dataset_da, batch_siz
         for i in range(prev, prev+val, batch_size):
 #             print(i, min(batch_size, prev+val-i))
             yield data_gen_acts(dataset, dataset_bs, dataset_da, min(batch_size, prev+val-i), i, wordtoidx)
-        #     break # uncomment both break stats to run for 1 batch for SET++,HIER++ models
+        #     break # uncomment both break to run 1 batch for SET++,HIER++,joint models
         # break
         prev += val
 

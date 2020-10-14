@@ -2,6 +2,8 @@ import math, torch, torch.nn as nn, torch.nn.functional as F
 from collections import Counter
 from nltk.util import ngrams
 import json, numpy as np
+import Constants
+from action_pred import compute_metrics_binary
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # print(device)
@@ -18,6 +20,51 @@ def tensor_to_sents(data, wordtoidx): #2d tensor or list of tensors!
         l = (line==eos_index).nonzero()[0].item()+1 if (line==eos_index).any() else max_sent_len
         sents.append(' '.join([idxtoword[e.item()] for e in line[:l]]))
     return sents
+
+def compute_bs_accuracy(pred, act):
+	total_actual = torch.cat([act[0].unsqueeze(-1), act[1].unsqueeze(-1)], dim=2)
+	pred_l = pred.reshape(pred.shape[0], -1, 2) # bs, triplets, 2
+	mask = ~((total_actual==0)|(total_actual==2)) #dont compute for PAD/EOS(won't have sos)
+
+	temp = (total_actual==pred_l)*mask # bs, triplets, 2
+	tp = (temp[:,:,0]*temp[:,:,1]).cpu().numpy().sum()
+	total = np.count_nonzero(total_actual*mask)
+	joint_acc = 2*tp/total #/2 as each triplet is counted twice
+
+	slot_acc = temp.sum().cpu().numpy()/total
+	return joint_acc, slot_acc
+
+
+def generate_hieract(act): # input - N, triplets, 3
+	hieract = np.zeros((act.shape[0], 44))
+
+	for i, da in enumerate(act-3):
+		for d in da[:,0][da[:,0]>=0]:
+			hieract[i][d]=1
+		for a in da[:,1][da[:,1]>=0]:
+			hieract[i][a+10]=1
+		for s in da[:,2][da[:,2]>=0]:
+			hieract[i][s+17]=1
+	return hieract
+
+def compute_da_metrics(pred, act): # begin from first triplet(no sos) 
+	act = torch.cat([act[0].unsqueeze(-1), act[1].unsqueeze(-1), act[2].unsqueeze(-1)], dim=2) # N, triplets, 3
+	pred = pred.reshape(pred.shape[0], -1, 3) # N, triplets, 3
+
+	pred_hieract = generate_hieract(pred)
+	act_hieract = generate_hieract(act)
+	precision, recall, f1_score = compute_metrics_binary(pred_hieract.reshape(-1), act_hieract.reshape(-1))
+
+	mask = ~((act==0)|(act==2)) # Don't count pad or eos, won't have sos in actual da
+	act = act*mask
+	pred = pred*mask
+
+	temp = act==pred
+	tp = (temp[:,:,0]*temp[:,:,1]*temp[:,:,2]).cpu().numpy().sum()
+	total = np.count_nonzero(act*mask)
+	joint_acc = 3*tp/total
+	slot_acc = temp.sum().cpu().numpy()/total
+	return (joint_acc, slot_acc), (precision, recall, f1_score)
 
 
 def obtain_TP_TN_FN_FP(pred, act, TP, TN, FN, FP, elem_wise=False):
@@ -39,8 +86,6 @@ def obtain_TP_TN_FN_FP(pred, act, TP, TN, FN, FP, elem_wise=False):
 		FN += ((pred == 0).astype('long') & (act > 0).astype('long')).sum()
 		FP += ((pred > 0).astype('long') & (act == 0).astype('long')).sum()
 		return TP, TN, FN, FP
-
-
 
 
 class F1Scorer(object):

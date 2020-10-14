@@ -27,41 +27,20 @@ from evaluate import evaluateModel
 import Constants
 import argparse
 
-# from sklearn.metrics import precision_recall_fscore_support
-
 if not os.path.isdir('running'):
 	os.makedirs('running')
 
 
-def split_to_files(split):
+def split_to_responses(split): # return original responses, file names
 	if split=='train':
-		return train_dialog_files
+		return train_responses, train_dialog_files
 	if split=='val':
-		return val_dialog_files
+		return val_responses, val_dialog_files
 	if split=='test':
-		return test_dialog_files
-	return None
-
-
-def split_to_responses(split): # return original responses
-	if split=='train':
-		return train_responses
-	if split=='val':
-		return val_responses
-	if split=='test':
-		return test_responses
+		return test_responses, test_dialog_files
 	return ValueError
 
-def get_files_action_pred(split): # dataset, dataset_counter, dataset_bs_kb, dataset_actvecs
-	if split=='train':
-		return train, train_counter, train_bs_kb, train_hierarchial_actvecs
-	if split=='val':
-		return val, val_counter, val_bs_kb, val_hierarchial_actvecs
-	if split=='test':
-		return test, test_counter, test_bs_kb, test_hierarchial_actvecs
-	return ValueError
-
-def get_files_joint(split): # dataset, dataset_counter, dataset_bs_kb, dataset_actvecs
+def get_files_joint(split): # dataset, dataset_counter, dataset_bs, dataset_da
 	if split=='train':
 		return train, train_counter, train_bs, train_dialog_act
 	if split=='val':
@@ -74,6 +53,10 @@ def get_files_joint(split): # dataset, dataset_counter, dataset_bs_kb, dataset_a
 def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # losses per batch
 	model.train()
 	total_loss =0
+	total_response_loss =0
+	total_bs_loss =0
+	total_da_loss =0
+
 	start_time = time.time()
 	ntokens = len(idxtoword)
 	nbatches = len(train)//batch_size
@@ -81,8 +64,6 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 #     if torch.cuda.is_available():
 #         stat_cuda('before epoch')
 		
-	score=0
-	total_bleu_score=0
 	accumulated_steps = 3
 	optimizer.zero_grad()
 
@@ -90,14 +71,14 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 
 		batch_size_curr = data.shape[1]
 		# optimizer.zero_grad()
-		output, bs_output , da_output = model(data, bs, da, targets)
+		output, bs_logits , da_logits = model(data, bs, da, targets)
 
 		response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
-		# TODO: bs_output - ?,  bs_target[0] - 32, V
-		belief_loss=criterion(bs_output[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1))+criterion(bs_output[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
+		# TODO: bs_logits - ?,  bs_target[0] - 32, V
+		belief_loss=criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1))+criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
 
-		da_loss=criterion(da_output[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_output[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_output[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
+		da_loss=criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
 		
 		# print(response_loss, belief_loss, da_loss)	
 		cur_loss = response_loss+belief_loss+da_loss
@@ -111,14 +92,65 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 			optimizer.step()
 			optimizer.zero_grad()
 
+
 		total_loss += cur_loss.item()*batch_size_curr
-		elapsed = time.time()-start_time
-		exit()
+		total_response_loss += response_loss.item()*batch_size_curr
+		total_bs_loss += belief_loss.item()*batch_size_curr
+		total_da_loss += da_loss.item()*batch_size_curr
+
+	elapsed = time.time()-start_time
 
 	total_loss /= len(train)
-	logger.debug('==> Epoch {}, Train \tLoss: {:0.5f}\tTime taken: {:0.1f}'.format(epoch,  total_loss, elapsed))
+	total_response_loss /= len(train)
+	total_bs_loss /=len(train)
+	total_da_loss /= len(train)
+
+	logger.debug('==>Epoch {}, Train \tResp Loss: {:0.3f} BS Loss: {:0.3f} DA Loss: {:0.3f}\tTotal loss {:0.3f}\tTime {:0.0f}s'.format(epoch,  total_response_loss, total_bs_loss, total_da_loss, total_loss, elapsed))
+
 	return total_loss
 
+
+def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per batch
+
+	model.eval()
+	total_loss =0
+	total_response_loss =0
+	total_bs_loss =0
+	total_da_loss =0
+	start_time = time.time()
+	ntokens = len(idxtoword)
+	
+	dataset, dataset_counter, dataset_bs, dataset_da = get_files_joint(split)	
+	
+	with torch.no_grad():
+		for i, (data, targets, labels, bs, da, bs_target, da_target) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, wordtoidx)):
+
+			batch_size_curr = data.shape[1]
+			output, bs_logits , da_logits = model(data, bs, da, targets)
+
+			response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
+
+			belief_loss=criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1))+criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
+
+			da_loss=criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
+
+			cur_loss = response_loss+belief_loss+da_loss
+
+			total_loss += cur_loss.item()*batch_size_curr
+			total_response_loss += response_loss.item()*batch_size_curr
+			total_bs_loss += belief_loss.item()*batch_size_curr
+			total_da_loss += da_loss.item()*batch_size_curr
+
+	elapsed = time.time()-start_time
+
+	total_loss /= len(dataset)
+	total_response_loss /= len(train)
+	total_bs_loss /=len(train)
+	total_da_loss /= len(train)
+
+	logger.debug('==>{} \tResp Loss: {:0.3f} BS Loss: {:0.3f} DA Loss: {:0.3f}\tTotal loss {:0.3f}\tTime {:0.0f}s'.format(split, total_response_loss, total_bs_loss, total_da_loss, total_loss, elapsed))
+
+	return total_loss
 
 
 def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , batch_size, criterion, split, method='beam', beam_size=None):
@@ -129,8 +161,10 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 		logger.debug('Beam size {}'.format(beam_size))
 	model.eval()
 	total_loss =0
-	ntokens = len(wordtoidx)
-	score=0
+	total_bs_loss=0
+	total_da_loss=0
+	total_response_loss=0
+
 	start = time.time()
 	nbatches = len(dataset)//batch_size
 
@@ -140,41 +174,62 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 			batch_size_curr = targets.shape[1]
 
 			if method=='beam':
-				if isinstance(model, nn.DataParallel):
+				if isinstance(model, nn.DataParallel): # TODO beam search for joint model
 					# gives list of sentences itself
 					output = model.module.translate_batch(data, act_vecs, beam_size, batch_size_curr)
 				else:
 					output = model.translate_batch(data, act_vecs, beam_size , batch_size_curr) 
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
-					output, output_max = model.module.greedy_search(data,  batch_size_curr) # .module. if using dataparallel
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr) # .module. if using dataparallel
 				else:
-					output, output_max, bs_logits, bs, da_logits, da = model.greedy_search(data, batch_size_curr) 
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr)
 
-			label_pad_mask = labels.transpose(0,1)!=0
-			
+			# print(bs_output[2:].transpose(0,1).shape)
+			# print(bs_target[0][:, 1:].shape)
+			# exit()
+
 			if torch.is_tensor(output): # greedy search
 
 				response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1)).item()
 
 				bs_loss = criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].transpose(0,1)[1:].reshape(-1))+criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].transpose(0,1)[1:].reshape(-1))
 				bs_loss = bs_loss.item()
+
 				da_loss = criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].transpose(0,1)[1:].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].transpose(0,1)[1:].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].transpose(0,1)[1:].reshape(-1))
 				da_loss = da_loss.item()
 
 				cur_loss = response_loss+bs_loss+da_loss
 
+				total_response_loss += response_loss*batch_size_curr
+				total_bs_loss += bs_loss*batch_size_curr
+				total_da_loss += da_loss*batch_size_curr
+
 				total_loss += cur_loss * batch_size_curr
 
 				# output = torch.max(output, dim=2)[1]
-				output_max = post_process(output_max.transpose(0,1))	
+				output_max = post_process(output_max.transpose(0,1))
 				
 				if i==0:
 					hyp = output_max
 					ref = targets.transpose(0,1)
+					bs_pred=bs_output[2:].transpose(0,1) # bs, 48
+					bs_act = [bs_target[0][:, 1:], bs_target[1][:, 1:]]#bs,24 | bs,24
+					da_pred = da_output[3:].transpose(0,1) # bs, 48
+					da_act = [da_target[0][:,1:], da_target[1][:, 1:], da_target[2][:, 1:]]
 				else:
 					hyp = torch.cat((hyp, output_max), dim=0)
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
+
+					bs_pred= torch.cat([bs_pred, bs_output[2:].transpose(0,1)])
+					bs_act[0] = torch.cat([bs_act[0], bs_target[0][:, 1:]])
+					bs_act[1] = torch.cat([bs_act[1], bs_target[1][:, 1:]])
+
+					da_pred=torch.cat([da_pred, da_output[3:].transpose(0,1)])
+					da_act[0]=torch.cat([da_act[0], da_target[0][:, 1:]])
+					da_act[1]=torch.cat([da_act[1], da_target[1][:, 1:]])
+					da_act[2]=torch.cat([da_act[2], da_target[2][:, 1:]])
+
 			else: # beam search
 				if i==0:
 					hyp = [torch.tensor(l) for l in output]
@@ -183,18 +238,30 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					hyp.extend([torch.tensor(l) for l in output])
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
+		"""
+		bs_pred.shape - bs, 48 - without sos
+		bs_act[0].shape, bs_act[1].shape = bs, 24
+		in accuracy, exlcude eos, pad
+		"""
+
+		bs_joint_acc, bs_slot_acc = compute_bs_accuracy(bs_pred, bs_act)		
+		da_acc, da_hdsa_metrics = compute_da_metrics(da_pred, da_act)
+
 		indices = list(range(0, len(dataset)))
 		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
 
 		pred_hyp = tensor_to_sents(hyp , wordtoidx)  # hyp[indices]
-		pred_ref = split_to_responses(split)
-		# pred_ref = split_to_responses(split)[:args.batch_size] # uncomment for 1 batch
+		pred_ref, all_dialog_files = split_to_responses(split)
+		# pred_ref = pred_ref[:args.batch_size] # uncomment for 1 batch
 		
-		score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
+		bleu_score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
 		f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
-		total_loss = total_loss/len(dataset)
 
-		all_dialog_files = split_to_files(split)
+		total_loss = total_loss/len(dataset)
+		total_response_loss = total_response_loss/len(dataset)
+		total_bs_loss = total_bs_loss/len(dataset)
+		total_da_loss = total_da_loss/len(dataset)
+
 		evaluate_dials = {}
 		for i, h in enumerate(pred_hyp):
 			if all_dialog_files[i] in evaluate_dials:
@@ -218,34 +285,17 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 
 	elapsed = time.time()-start
-	criteria = score+0.5*(matches+successes)
-	logger.debug('==> {} \tLoss: {:0.4f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tCriteria: {:0.3f}\tTime taken: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, criteria, elapsed))
-	return total_loss, score, f1_entity, matches, successes
-
-
-
-def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per batch
-	model.eval()
-	total_loss =0
-	start_time = time.time()
-	ntokens = len(idxtoword)
 	
-	dataset, dataset_counter, dataset_bs, dataset_da = get_files_joint(split)	
-	
-	with torch.no_grad():
-		for i, (data, targets, labels, bs, da, bs_output, da_output) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, wordtoidx)):
+	logger.debug('==>{}\tResp Loss: {:0.3f}\tBS Loss: {:0.3f}\tDA Loss: {:0.3f}\tTotal Loss: {:0.3f}\tTime taken: {:0.1f}s'.format(split,  total_response_loss, total_bs_loss, total_da_loss, total_loss, elapsed))
 
-			batch_size_curr = data.shape[1]
-			output = model(data, targets,  act_vecs)
-			loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1)) 
-			total_loss += loss.item()*batch_size_curr
+	logger.debug('==>{}\tBelief state Joint acc: {:0.2f}\tSlot acc: {:0.2f}'.format(split,  bs_joint_acc, bs_slot_acc))
 
-		elapsed = time.time()-start_time
+	logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f} || HDSA precision: {:0.2f}  recall {:0.2f}  f1_score: {:0.2f}'.format(split, da_acc[0], da_acc[1], da_hdsa_metrics[0], da_hdsa_metrics[1], da_hdsa_metrics[2]))
 
-	total_loss /= len(dataset)
-	logger.debug('{} \tLoss(using ground truths): {:0.7f}\tTime taken: {:0.1f}s'.format(split, total_loss, elapsed))
-	return total_loss
+	criteria = bleu_score+0.5*(matches+successes)
+	logger.debug('==>{}\tBleu: {:0.2f}\tF1-Entity {:0.2f}\tInform {:0.2f}\tSuccesses: {:0.2f}\tCriteria: {:0.2f}'.format( split, bleu_score, f1_entity, matches, successes, criteria ))
 
+	return total_loss, bleu_score, f1_entity, matches, successes
 
 
 # stat_cuda('before training')
@@ -309,96 +359,6 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		scheduler.step()
 	
 	return best_model
-
-
-def train_action_pred(model, args, criterion, optimizer, scheduler):
-	ntokens = len(idxtoword)
-	# nbatches = len(train)//args.batch_size
-	model.train()
-	best_val_f1 = -float("inf")
-
-	for e in range(1, 1+args.epochs):
-		total_loss =0
-		start_time = time.time()
-		optimizer.zero_grad()
-
-		for i, (data, bs, act_vecs) in enumerate(data_loader_action_pred(train, train_counter, train_bs_kb, train_hierarchial_actvecs, args.batch_size, wordtoidx)):
-
-			batch_size_curr = data.shape[1]
-			optimizer.zero_grad()	
-			output = model(data, bs)
-			loss = criterion(output.reshape(-1), act_vecs.reshape(-1))
-			loss.backward()
-			torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-			optimizer.step()
-			total_loss += loss.item()*batch_size_curr
-			
-		elapsed = time.time()-start_time
-		total_loss /= len(train)
-		logger.debug('==>Train Epoch {}, Train \tLoss: {:0.4f}\tTime taken: {:0.1f}'.format(e,  total_loss, elapsed))
-
-		val_precision, val_recall, val_f1 = evaluate_action_pred(model, args, criterion, optimizer, scheduler, 'val')
-		logger.debug('Val Precision: {:0.2f}\tRecall: {:0.2f}\tF1 Score: {:0.2f}'.format(precision*100, recall*100, f1_score*100))
-		if val_f1 > best_val_f1:
-			best_val_f1 = val_f1
-			save_model(model, args, 'checkpoint_ap.pt', total_loss, -1, -1)
-		
-	return 
-
-def compute_metrics(y_true, y_pred):
-	# precision = tp/tp+fp, recall = tp/tp+fn
-	y_true = np.array(y_true)
-	y_pred = np.array(y_pred)
-
-	tp = sum(y_true*y_pred)
-	fp = sum(np.logical_not(y_true)*y_pred)
-	tn = sum(np.logical_not(y_true)*np.logical_not(y_pred))
-	fn = sum(y_true*np.logical_not(y_pred))
-	precision = tp/(tp+fp)
-	recall = tp/(tp+fn)
-	f1_score = 2*precision*recall/(precision+recall)
-	return precision, recall, f1_score
-
-def evaluate_action_pred(model, args, criterion, optimizer, scheduler, split):
-	model.eval()
-
-	total_loss =0
-	start_time = time.time()
-	optimizer.zero_grad()
-	pred_actvecs =[]
-
-	dataset, dataset_counter, dataset_bs_kb, dataset_actvecs = get_files(split)
-
-	for i, (data, bs, act_vecs) in enumerate(data_loader_action_pred(dataset, dataset_counter, dataset_bs_kb, dataset_actvecs, args.batch_size, wordtoidx)):
-
-		batch_size_curr = data.shape[1]
-		output = model(data, bs)
-		loss = criterion(output.reshape(-1), act_vecs.reshape(-1))	
-		total_loss += loss.item()*batch_size_curr
-		
-		pred = (output>=0.5).transpose(0,1).long().numpy()
-		# print(pred)
-		pred_actvecs.extend(pred)
-
-	# dataset_actvecs = dataset_actvecs[:args.batch_size] # uncomment for one batch
-	
-	assert(len(dataset_actvecs)==len(pred_actvecs))
-
-	flat_dataset_actvecs = [item for sublist in dataset_actvecs for item in sublist]
-	flat_pred_actvecs = [item for sublist in pred_actvecs for item in sublist]
-	# print(len(flat_dataset_actvecs) ,len(flat_pred_actvecs))
-
-	# calculate precision, recall, f1-score from sklearn/ compute_metrics
-
-	# precision, recall, f1_score, _ = precision_recall_fscore_support(flat_dataset_actvecs, flat_pred_actvecs, average='binary')
-
-	precision, recall, f1_score = compute_metrics(flat_dataset_actvecs, flat_pred_actvecs)
-	logger.debug('Action Prediction: Precision: {:0.2f}\tRecall: {:0.2f}\tF1 Score: {:0.2f}'.format(precision*100, recall*100, f1_score*100))
-
-	elapsed = time.time()-start_time
-	total_loss /= len(dataset)
-	logger.debug('==>Action Prediction: {} \t Loss: {:0.4f}\tTime taken: {:0.1f}'.format(split,  total_loss, elapsed))
-	return
 
 
 def save_model(model, args, name, train_loss, val_loss, val_bleu):
@@ -496,9 +456,28 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
 
-train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = gen_dataset_joint('train')
-val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses = gen_dataset_joint('val')
-test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses =gen_dataset_joint('test')
+
+# train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = gen_dataset_joint('train')
+# val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses = gen_dataset_joint('val')
+# test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses =gen_dataset_joint('test')
+
+# # save datasets
+# with open('data/train_joint.pkl', 'wb') as f:
+# 	pkl.dump([train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses], f)
+# with open('data/val_joint.pkl', 'wb') as f:
+# 	pkl.dump([val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses], f)
+# with open('data/test_joint.pkl', 'wb') as f:
+# 	pkl.dump([test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses],f)
+
+# load datasets
+with open('data/train_joint.pkl', 'rb') as f:
+	train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = pkl.load(f)
+with open('data/val_joint.pkl', 'rb') as f:
+	val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses =pkl.load(f)
+with open('data/test_joint.pkl', 'rb') as f:
+	test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses=pkl.load(f)
+
+
 
 max_sent_len = 50
 
@@ -554,8 +533,6 @@ def run(args, optuna_callback=None):
 	
 	max_sent_len = 50
 
-	ntokens=len(wordtoidx)
-
 	if args.model_type=="action_pred":
 		model = Action_predictor(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.dropout)
 		criterion = nn.BCELoss()
@@ -590,13 +567,12 @@ def run(args, optuna_callback=None):
 		evaluate_action_pred(model, args, criterion, optimizer, scheduler, 'test')
 		return
 
-
 	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
 	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
+	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	# logger.debug('Testing model\n')
-	_,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
 	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
