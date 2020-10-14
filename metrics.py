@@ -23,13 +23,13 @@ def tensor_to_sents(data, wordtoidx): #2d tensor or list of tensors!
 
 def compute_bs_accuracy(pred, act):
 	total_actual = torch.cat([act[0].unsqueeze(-1), act[1].unsqueeze(-1)], dim=2)
-	pred_l = pred.reshape(pred.shape[0], -1, 2) # bs, triplets, 2
+	pred_l = pred.reshape(pred.shape[0], -1, 2) # N, triplets, 2
 	mask = ~((total_actual==0)|(total_actual==2)) #dont compute for PAD/EOS(won't have sos)
 
-	temp = (total_actual==pred_l)*mask # bs, triplets, 2
+	temp = (total_actual==pred_l)*mask # N, triplets, 2
 	tp = (temp[:,:,0]*temp[:,:,1]).cpu().numpy().sum()
 	total = np.count_nonzero(total_actual*mask)
-	joint_acc = 2*tp/total #/2 as each triplet is counted twice
+	joint_acc = (2*tp)/total #/2 as each triplet is counted twice
 
 	slot_acc = temp.sum().cpu().numpy()/total
 	return joint_acc, slot_acc
@@ -62,7 +62,7 @@ def compute_da_metrics(pred, act): # begin from first triplet(no sos)
 	temp = act==pred
 	tp = (temp[:,:,0]*temp[:,:,1]*temp[:,:,2]).cpu().numpy().sum()
 	total = np.count_nonzero(act*mask)
-	joint_acc = 3*tp/total
+	joint_acc = (3*tp)/total
 	slot_acc = temp.sum().cpu().numpy()/total
 	return (joint_acc, slot_acc), (precision, recall, f1_score)
 

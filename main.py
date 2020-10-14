@@ -185,10 +185,6 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 				else:
 					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr)
 
-			# print(bs_output[2:].transpose(0,1).shape)
-			# print(bs_target[0][:, 1:].shape)
-			# exit()
-
 			if torch.is_tensor(output): # greedy search
 
 				response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1)).item()
