@@ -453,9 +453,9 @@ logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
 
 
-# train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = gen_dataset_joint('train')
-# val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses = gen_dataset_joint('val')
-# test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses =gen_dataset_joint('test')
+train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = gen_dataset_joint('train')
+val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses = gen_dataset_joint('val')
+test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses =gen_dataset_joint('test')
 
 # # save datasets
 # with open('data/train_joint.pkl', 'wb') as f:
@@ -465,14 +465,13 @@ formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s"
 # with open('data/test_joint.pkl', 'wb') as f:
 # 	pkl.dump([test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses],f)
 
-# load datasets
-with open('data/train_joint.pkl', 'rb') as f:
-	train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = pkl.load(f)
-with open('data/val_joint.pkl', 'rb') as f:
-	val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses =pkl.load(f)
-with open('data/test_joint.pkl', 'rb') as f:
-	test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses=pkl.load(f)
-
+# # load datasets
+# with open('data/train_joint.pkl', 'rb') as f:
+# 	train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = pkl.load(f)
+# with open('data/val_joint.pkl', 'rb') as f:
+# 	val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses =pkl.load(f)
+# with open('data/test_joint.pkl', 'rb') as f:
+# 	test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses=pkl.load(f)
 
 
 max_sent_len = 50
