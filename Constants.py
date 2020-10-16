@@ -13,9 +13,10 @@ def append_or_add(dictionary, name, key):
     else:
         dictionary[name] = [key]
 
-domains = ['restaurant', 'hotel', 'attraction', 'train', 'taxi', 'hospital', 'police', 'bus', 'booking', 'general']
-functions = ['inform', 'request', 'recommend', 'book', 'select', 'sorry', 'none']
-arguments = ['pricerange', 'id', 'address', 'postcode', 'type', 'food', 'phone', 'name', 'area', 'choice',  'price', 'time', 'reference', 'none', 'parking', 'stars', 'internet', 'day', 'arriveby', 'departure', 'destination', 'leaveat', 'duration', 'trainid', 'people', 'department', 'stay']
+domains = ['attraction', 'booking', 'bus', 'general', 'hospital', 'hotel', 'police', 'restaurant', 'taxi', 'train']
+functions = ['book', 'inform', 'none', 'recommend', 'request', 'select', 'sorry']
+arguments = ['address', 'area', 'arriveby', 'choice', 'day', 'department', 'departure', 'destination', 'duration', 'food', 'id', 'internet', 'leaveat', 'name', 'none', 'parking', 'people', 'phone', 'postcode', 'price', 'pricerange', 'reference', 'stars', 'stay', 'time', 'trainid', 'type']
+
 
 V_domains = ['PAD', 'SOS', 'EOS']+ domains
 V_slots = ['PAD', 'SOS', 'EOS']+ arguments

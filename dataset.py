@@ -132,22 +132,34 @@ def gen_dataset_joint(split_name): # [ no of turns , src, tgt, act_vecs, hierarc
 
 			src.append(user)
 
+			bs_list=[]
 			bs = 'SOS SOS '
 			for domain, v_all in turn['BS'].items():# v_all is list of [slot_name, value] for that domain
 				for v in v_all:
 					# domain, slot_name1, domain, slot_name2,..
-					bs += domain + " " + v[0].lower() + " "
-			bs += ' EOS EOS '			
-			bs = bs + (MBS -len(bs.split()))*' PAD' 
-			# In bs.split()- domains - bs[::2], slots-bs[1::2] 
-			
-			# use turn['KB']
+					bs_list.append([domain, v[0].lower()])
 
+			bs_list = sorted(bs_list) # sort in alphabetical according to domain first, then by slot
+			for ele in bs_list:
+				bs += ele[0] + " " + ele[1] + " "
+
+			bs += ' EOS EOS '			
+			bs = bs + (MBS -len(bs.split()))*' PAD'
+			# In bs.split()- domains - bs[::2], slots-bs[1::2]
+			
+			# === use turn['KB'] # TODO
+
+			dialog_act_list=[]
 			dialog_act = 'SOS SOS SOS '
 			if turn['act'] != "None":
 				for w in turn['act']:
 					d, f, s = w.split('-')
-					dialog_act +=  ' '.join([d,f,s]) + " "
+					dialog_act_list.append([d,f,s])
+
+			dialog_act_list = sorted(dialog_act_list) # sort in alphabetical according to domain first, then by action, then by slot
+
+			for da in dialog_act_list:
+				dialog_act +=  ' '.join(da) + " "
 			dialog_act += ' EOS EOS EOS '
 			dialog_act = dialog_act + (MDA-len(dialog_act.split()))*' PAD'
 
