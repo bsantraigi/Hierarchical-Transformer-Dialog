@@ -6,4 +6,5 @@ preprocessing
 hier.db
 **__pycache__**
 **.ipynb_checkpoints**
-HDSA-Dialog/
+HDSA-Dialog/i
+*.pyc
