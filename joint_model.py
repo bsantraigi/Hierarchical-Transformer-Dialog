@@ -210,7 +210,11 @@ class Joint_model(nn.Module):
 		output_max = torch.max(output, dim=2)[1]
 		return output, output_max
 
-	def greedy_search(self, src, batch_size):
+	def to_vocab_index(self, v, imap): # all v should be for one imap
+		v.apply_(lambda y: imap[y])
+		return v
+
+	def greedy_search(self, src, batch_size, imaps):
 		# Index 2 is SOS, index 3 is EOS in all vocabs
 		max_sent_len = 50
 		max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
@@ -231,6 +235,9 @@ class Joint_model(nn.Module):
 			else:
 				belief_logits[0] = torch.cat([belief_logits[0], cur_logits[0]])
 				belief_logits[1] = torch.cat([belief_logits[1], cur_logits[1]])
+			# cur_belief - 2,32
+			cur_belief[0] = self.to_vocab_index(cur_belief[0], imaps[0]) 
+			cur_belief[1] = self.to_vocab_index(cur_belief[1], imaps[1]) 
 			belief = torch.cat([belief, cur_belief])
 
 		# belief - [50, 32], belief_logits - each ele - ([24, 32, V_d/a/s]) 
@@ -251,6 +258,10 @@ class Joint_model(nn.Module):
 				da_logits[0] = torch.cat([da_logits[0], cur_logits[0]])
 				da_logits[1] = torch.cat([da_logits[1], cur_logits[1]])
 				da_logits[2] = torch.cat([da_logits[2], cur_logits[2]])
+			# cur_da - 3, 32
+			cur_da[0].apply_(lambda y: imaps[0][y])
+			cur_da[1].apply_(lambda y: imaps[2][y])
+			cur_da[2].apply_(lambda y: imaps[1][y])
 			da = torch.cat([da, cur_da])
 
 		# da - [51, 32], da_logits - each ele - ([16, 32, V_d/a/s]) 

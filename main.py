@@ -182,9 +182,9 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					output = model.translate_batch(data, act_vecs, beam_size , batch_size_curr) 
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr) # .module. if using dataparallel
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap]) # .module. if using dataparallel
 				else:
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr)
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap])
 
 			if torch.is_tensor(output): # greedy search
 
@@ -488,7 +488,16 @@ ntokens=len(wordtoidx)
 
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
-
+# Use these in evaluation
+d_to_imap = {}
+s_to_imap = {}
+a_to_imap = {}
+for w, v in Constants.V_domains_wtoi.items():
+	d_to_imap[v]=wordtoidx[w]
+for w, v in Constants.V_slots_wtoi.items():
+	s_to_imap[v]=wordtoidx[w]
+for w, v in Constants.V_actions_wtoi.items():
+	a_to_imap[v]=wordtoidx[w]
 
 def run(args, optuna_callback=None):
 	global logger 
