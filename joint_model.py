@@ -223,9 +223,11 @@ class Joint_model(nn.Module):
 
 		tgt = 2*torch.ones(1, batch_size , device=device).long()
 		eos_tokens = 3*torch.ones(1, batch_size, device=device).long()
-		belief = 2*torch.ones(2, batch_size , device=device).long() # 2, bs
+		belief = 2*torch.ones(2, batch_size , device=device).long() # 2, bs #used in forward - in terms of vocab index
+		belief_out = 2*torch.ones(2, batch_size , device=device).long() # 2, bs
 		belief_eos = 3*torch.ones(2, batch_size , device=device).long()
 		da = 2*torch.ones(3, batch_size , device=device).long() # 3, bs
+		da_out = 2*torch.ones(3, batch_size , device=device).long() # 3, bs
 
 		memory = self.compute_encoder_output(src)
 
@@ -237,6 +239,7 @@ class Joint_model(nn.Module):
 			else:
 				belief_logits[0] = torch.cat([belief_logits[0], cur_logits[0]])
 				belief_logits[1] = torch.cat([belief_logits[1], cur_logits[1]])
+			belief_out = torch.cat([belief_out, cur_belief])
 			# cur_belief - 2,32
 			cur_belief[0] = self.to_vocab_index(cur_belief[0], imaps[0]) 
 			cur_belief[1] = self.to_vocab_index(cur_belief[1], imaps[1]) 
@@ -260,6 +263,7 @@ class Joint_model(nn.Module):
 				da_logits[0] = torch.cat([da_logits[0], cur_logits[0]])
 				da_logits[1] = torch.cat([da_logits[1], cur_logits[1]])
 				da_logits[2] = torch.cat([da_logits[2], cur_logits[2]])
+			da_out = torch.cat([da_out, cur_da])
 			# cur_da - 3, 32
 			cur_da[0] = self.to_vocab_index(cur_da[0], imaps[0])
 			cur_da[1] = self.to_vocab_index(cur_da[1], imaps[2])
@@ -285,7 +289,7 @@ class Joint_model(nn.Module):
 			tgt = torch.cat([tgt, output_max], dim=0)
 
 		tgt = torch.cat([tgt[:49,:], eos_tokens], dim=0)
-		return logits, tgt, belief_logits, belief, da_logits, da
+		return logits, tgt, belief_logits, belief_out, da_logits, da_out
 
 		
 	def translate_batch(self, src, act_vecs, n_bm, batch_size): # , src_pad_mask, tgt_pad_mask
