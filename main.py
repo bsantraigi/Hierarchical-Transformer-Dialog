@@ -311,7 +311,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 	logger.debug('At begin of training, Best val loss ground : {:0.7f} Best bleu: {:0.4f}, Best criteria: {:0.4f}'.format(best_val_loss_ground, best_val_bleu, best_criteria))
 	logger.debug('====> STARTING TRAINING NOW')
 
-	val_epoch_freq = 3
+	val_epoch_freq = 1
 	for epoch in range(1, args.epochs + 1):
 
 		epoch_start_time = time.time()
@@ -573,7 +573,7 @@ def run(args, optuna_callback=None):
 		evaluate_action_pred(model, args, criterion, optimizer, scheduler, 'test')
 		return
 
-	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
+	# best_val_loss_ground = load_model(model, args.log_path +'checkpoint_criteria.pt')
 	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 

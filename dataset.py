@@ -199,9 +199,7 @@ def build_vocab_freqbased(load): # [ no of turns , src, tgt, act_vecs, hierarchi
 	idxtoword[1]='UNK'
 	idxtoword[2] = 'SOS'
 	idxtoword[3]='EOS'
-	idxtoword[4]='BS_SEP'
-	idxtoword[5] = 'KB_RES'
-	i = 6
+	i = 4
 
 	for x in dataset:
 		dialog_file = x['file']

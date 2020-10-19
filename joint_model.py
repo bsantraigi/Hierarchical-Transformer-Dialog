@@ -173,7 +173,7 @@ class Joint_model(nn.Module):
 
 		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*triplets, bs, embed
 		pred_belief = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask) # 2*max_triplets, bs, embed
-		pred_belief = pred_belief.transpose(0,1).reshape(batch_size, -1, 2*self.ninp)
+		pred_belief = pred_belief.transpose(0,1).reshape(batch_size, -1, 2*self.ninp) # bs, max_triplets, 2*embed
 		
 		pred_belief_domains=self.linear_d(pred_belief[:,-1, :self.ninp]).unsqueeze(0) #1, bs, Vdomain
 		pred_belief_slots = self.linear_s(pred_belief[:,-1, self.ninp:]).unsqueeze(0) #1, bs, Vslots
@@ -223,11 +223,12 @@ class Joint_model(nn.Module):
 
 		tgt = 2*torch.ones(1, batch_size , device=device).long()
 		eos_tokens = 3*torch.ones(1, batch_size, device=device).long()
-		belief = 2*torch.ones(2, batch_size , device=device).long() # 2, bs #used in forward - in terms of vocab index
-		belief_out = 2*torch.ones(2, batch_size , device=device).long() # 2, bs
-		belief_eos = 3*torch.ones(2, batch_size , device=device).long()
+
+		belief = 2*torch.ones(2, batch_size , device=device).long() # 2, bs #used in forward - Total vocab indices
+		belief_out = 1*torch.ones(2, batch_size , device=device).long() # 2, bs
+
 		da = 2*torch.ones(3, batch_size , device=device).long() # 3, bs
-		da_out = 2*torch.ones(3, batch_size , device=device).long() # 3, bs
+		da_out = 1*torch.ones(3, batch_size , device=device).long() # 3, bs
 
 		memory = self.compute_encoder_output(src)
 
@@ -248,7 +249,7 @@ class Joint_model(nn.Module):
 		# belief - [50, 32], belief_logits - each ele - ([24, 32, V_d/a/s]) 
 		# - while computing bs loss remove SOS in belief targets with logits.
 
-		# belief = torch.cat([belief, belief_eos]) # should I append EOS at end?
+		# belief = torch.cat([belief, belief_eos]) # should append EOS at end?
 
 		bs_mask = _gen_mask_sent(belief.shape[0])
 		bs_pad_mask = (belief==0).transpose(0,1)
@@ -270,7 +271,8 @@ class Joint_model(nn.Module):
 			cur_da[2] = self.to_vocab_index(cur_da[2], imaps[1])
 			da = torch.cat([da, cur_da])
 
-		# da - [51, 32], da_logits - each ele - ([16, 32, V_d/a/s]) 
+		# da - [51, 32] in total vocab indices, da_out - [51, 32] 
+		# da_logits - each ele - ([16, 32, V_d/a/s]) 
 		# da = torch.cat([da, eos_tokens])
 
 		da_mask = _gen_mask_sent(da.shape[0])
