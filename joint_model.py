@@ -211,7 +211,9 @@ class Joint_model(nn.Module):
 		return output, output_max
 
 	def to_vocab_index(self, v, imap): # all v should be for one imap
-		v.apply_(lambda y: imap[y])
+		# v.apply_(lambda y: imap[y])
+		for key,value in imap.items():
+			v[v==key]=value
 		return v
 
 	def greedy_search(self, src, batch_size, imaps):
@@ -259,9 +261,9 @@ class Joint_model(nn.Module):
 				da_logits[1] = torch.cat([da_logits[1], cur_logits[1]])
 				da_logits[2] = torch.cat([da_logits[2], cur_logits[2]])
 			# cur_da - 3, 32
-			cur_da[0].apply_(lambda y: imaps[0][y])
-			cur_da[1].apply_(lambda y: imaps[2][y])
-			cur_da[2].apply_(lambda y: imaps[1][y])
+			cur_da[0] = self.to_vocab_index(cur_da[0], imaps[0])
+			cur_da[1] = self.to_vocab_index(cur_da[1], imaps[2])
+			cur_da[2] = self.to_vocab_index(cur_da[2], imaps[1])
 			da = torch.cat([da, cur_da])
 
 		# da - [51, 32], da_logits - each ele - ([16, 32, V_d/a/s]) 
