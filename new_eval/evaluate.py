@@ -541,7 +541,8 @@ class MultiWozEvaluator(BaseEvaluator):
                      'hospital': [0, 0, 0], 'police': [0, 0, 0]}
         sng_gen_stats = {'restaurant': [0, 0, 0], 'hotel': [0, 0, 0], 'attraction': [0, 0, 0], 'train': [0, 0, 0],
                          'taxi': [0, 0, 0], 'hospital': [0, 0, 0], 'police': [0, 0, 0]}
-
+        
+        all_stats = []
         for filename, dial in dialogues.items():
             data = delex_dialogues[filename]
             goal, success, match, requestables, _ = self._evaluateRealDialogue(data, filename)
@@ -551,6 +552,11 @@ class MultiWozEvaluator(BaseEvaluator):
             successes += success
             matches += match
             total += 1
+            all_stats.append({
+                'file': filename,
+                'match': match,
+                'success': success
+            })
 
             for domain in gen_stats.keys():
                 gen_stats[domain][0] += stats[domain][0]
@@ -595,7 +601,7 @@ class MultiWozEvaluator(BaseEvaluator):
 
         print(report)
 
-        return report, successes/float(total), matches/float(total)
+        return report, successes/float(total), matches/float(total), all_stats
 
 
 if __name__ == '__main__':
