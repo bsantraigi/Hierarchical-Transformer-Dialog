@@ -22,9 +22,9 @@ def tensor_to_sents(data, wordtoidx): #2d tensor or list of tensors!
     return sents
 
 def compute_bs_accuracy(pred, act):
-	total_actual = torch.cat([act[0].unsqueeze(-1), act[1].unsqueeze(-1)], dim=2)
+	total_actual = act.reshape(act.shape[0], -1, 2)
 	pred_l = pred.reshape(pred.shape[0], -1, 2) # N, triplets, 2
-	mask = ~((total_actual==0)|(total_actual==2)) #dont compute for PAD/EOS(won't have sos)
+	mask = ~((total_actual==Constants.PAD)|(total_actual==Constants.SOS)|(total_actual==Constants.EOS)) #dont compute for PAD/EOS/SOS
 
 	temp = (total_actual==pred_l)*mask # N, triplets, 2
 	tp = (temp[:,:,0]*temp[:,:,1]).cpu().numpy().sum()
@@ -48,14 +48,14 @@ def generate_hieract(act): # input - N, triplets, 3
 	return hieract
 
 def compute_da_metrics(pred, act): # begin from first triplet(no sos) 
-	act = torch.cat([act[0].unsqueeze(-1), act[1].unsqueeze(-1), act[2].unsqueeze(-1)], dim=2) # N, triplets, 3
+	act = act.reshape(act.shape[0], -1, 3) # N, triplets, 3
 	pred = pred.reshape(pred.shape[0], -1, 3) # N, triplets, 3
 
 	pred_hieract = generate_hieract(pred)
 	act_hieract = generate_hieract(act)
 	precision, recall, f1_score = compute_metrics_binary(pred_hieract.reshape(-1), act_hieract.reshape(-1))
 
-	mask = ~((act==0)|(act==2)) # Don't count pad or eos, won't have sos in actual da
+	mask = ~((act==Constants.PAD)|(act==Constants.SOS)|(act==Constants.EOS)) # Don't count pad or eos, won't have sos in actual da
 	act = act*mask
 	pred = pred*mask
 

@@ -221,18 +221,20 @@ class Joint_model(nn.Module):
 		max_sent_len = 50
 		max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
 
-		tgt = 2*torch.ones(1, batch_size , device=device).long()
-		eos_tokens = 3*torch.ones(1, batch_size, device=device).long()
+		tgt = Constants.SOS*torch.ones(1, batch_size , device=device).long()
+		eos_tokens = Constants.EOS*torch.ones(1, batch_size, device=device).long()
 
-		belief = 2*torch.ones(2, batch_size , device=device).long() # 2, bs #used in forward - Total vocab indices
+		belief = Constants.SOS*torch.ones(2, batch_size , device=device).long() # 2, bs #used in forward - Total vocab indices
 		belief_out = 1*torch.ones(2, batch_size , device=device).long() # 2, bs
 
-		da = 2*torch.ones(3, batch_size , device=device).long() # 3, bs
+		da = Constants.SOS*torch.ones(3, batch_size , device=device).long() # 3, bs
 		da_out = 1*torch.ones(3, batch_size , device=device).long() # 3, bs
 
 		memory = self.compute_encoder_output(src)
 
 		# Generate belief state
+		# belief - in total vocab index
+		# belief_out  - in individual d/s/a vocabs
 		for i in range(1, max_sent_len//2): # predict 48 words + sos+eos=50
 			cur_belief, cur_logits = self.decode_belief_state(belief, memory)
 			if i==1:

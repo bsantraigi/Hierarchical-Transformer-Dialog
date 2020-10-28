@@ -50,6 +50,32 @@ def get_files_joint(split): # dataset, dataset_counter, dataset_bs, dataset_da
 	return ValueError
 	
 
+def convert_bs_to_sent(data): # bs, 50
+	data = data.cpu().numpy()
+	res = []
+	sent_len = data.shape[1]
+	for sent in data:
+		curr = ""
+		for i in range(0, sent_len, 2):
+			curr += Constants.V_domains_itow[sent[i]] + " "+  Constants.V_slots_itow[sent[i+1]] + " "
+			if sent[i]==2:
+				break
+		res.append([curr])
+	return res
+
+def convert_da_to_sent(data): # bs, 51
+	data = data.cpu().numpy()
+	res = []
+	sent_len = data.shape[1]
+	for sent in data:
+		curr = ""
+		for i in range(0, sent_len, 3):
+			curr += Constants.V_domains_itow[sent[i]] + " "+ Constants.V_actions_itow[sent[i+1]]  +" "+Constants.V_slots_itow[sent[i+2]] +" "
+			if sent[i]==2:
+				break
+		res.append([curr])
+	return res
+
 def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # losses per batch
 	model.train()
 	total_loss =0
@@ -70,7 +96,8 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	for i, (data, targets, labels, bs, da, bs_target, da_target) in enumerate(data_loader_acts(train, train_counter, train_bs, train_dialog_act, batch_size, wordtoidx)):
 
 		batch_size_curr = data.shape[1]
-		# optimizer.zero_grad()		
+		# optimizer.zero_grad()
+
 		output, bs_logits , da_logits = model(data, bs, da, targets)
 
 		response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
@@ -183,15 +210,16 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
 					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap]) # .module. if using dataparallel
-				else:
+				else: # da_output_i in individal vocab indices
 					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap])
 
 			if torch.is_tensor(output): # greedy search
 
-				response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1)).item()
+				response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1)).item()				
 
-				bs_loss = criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0][1:].reshape(-1))+criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1][1:].reshape(-1))
+				bs_loss = criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0][1:].reshape(-1)) + criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1][1:].reshape(-1))
 				bs_loss = bs_loss.item()
+
 
 				da_loss = criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0][1:].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1][1:].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2][1:].reshape(-1))
 				da_loss = da_loss.item()
@@ -211,22 +239,23 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					hyp = output_max
 					ref = targets.transpose(0,1)
 
-					bs_pred=bs_output[2:].transpose(0,1) # bs, 48
-					bs_act = [bs_target[0][1:].transpose(0,1), bs_target[1][1:].transpose(0,1)] #bs,24 | bs,24
-					da_pred = da_output[3:].transpose(0,1) # bs, 48
-					da_act = [da_target[0][1:].transpose(0,1), da_target[1][1:].transpose(0,1), da_target[2][1:].transpose(0,1)]
+					bs_pred = bs_output.transpose(0,1) # bs, 50 - with sos
+					bs_act = [bs_target[0].transpose(0,1), bs_target[1].transpose(0,1)] #bs,25 | bs,25
+
+					da_pred = da_output.transpose(0,1) # bs, 51					
+					da_act = [da_target[0].transpose(0,1), da_target[1].transpose(0,1), da_target[2].transpose(0,1)]
 				else:
 					hyp = torch.cat((hyp, output_max), dim=0)
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
-					bs_pred= torch.cat([bs_pred, bs_output[2:].transpose(0,1)])
-					bs_act[0] = torch.cat([bs_act[0], bs_target[0][1:].transpose(0,1)])
-					bs_act[1] = torch.cat([bs_act[1], bs_target[1][1:].transpose(0,1)])
+					bs_pred= torch.cat([bs_pred, bs_output.transpose(0,1)])
+					bs_act[0] = torch.cat([bs_act[0], bs_target[0].transpose(0,1)])
+					bs_act[1] = torch.cat([bs_act[1], bs_target[1].transpose(0,1)])
 
 					da_pred=torch.cat([da_pred, da_output[3:].transpose(0,1)])
-					da_act[0]=torch.cat([da_act[0], da_target[0][1:].transpose(0,1)])
-					da_act[1]=torch.cat([da_act[1], da_target[1][1:].transpose(0,1)])
-					da_act[2]=torch.cat([da_act[2], da_target[2][1:].transpose(0,1)])
+					da_act[0]=torch.cat([da_act[0], da_target[0].transpose(0,1)])
+					da_act[1]=torch.cat([da_act[1], da_target[1].transpose(0,1)])
+					da_act[2]=torch.cat([da_act[2], da_target[2].transpose(0,1)])
 
 			else: # beam search
 				if i==0:
@@ -236,17 +265,22 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					hyp.extend([torch.tensor(l) for l in output])
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
+
 		"""
-		bs_pred.shape - bs, 48 - without sos
-		bs_act[0].shape, bs_act[1].shape = bs, 24
-		in accuracy, exlcude eos, pad
+		bs_pred.shape - bs, 50 - with sos
+		bs_act[0].shape, bs_act[1].shape = bs, 25 -> changed to bs,50 below
+		in metrics such as accuracy, exlcude sos, eos, pad
+		both bs_pred, bs_act in total vocab indices now
 		"""
 
-		bs_joint_acc, bs_slot_acc = compute_bs_accuracy(bs_pred, bs_act)		
+		bs_act = torch.cat([bs_act[0].unsqueeze(-1), bs_act[1].unsqueeze(-1)], dim=2).reshape(bs_pred.shape[0], -1) # append alternatively
+		bs_joint_acc, bs_slot_acc = compute_bs_accuracy(bs_pred, bs_act)
+
+		da_act = torch.cat([da_act[0].unsqueeze(-1), da_act[1].unsqueeze(-1), da_act[2].unsqueeze(-1)], dim=2).reshape(da_pred.shape[0], -1) # append alternatively
 		da_acc, da_hdsa_metrics = compute_da_metrics(da_pred, da_act)
 
-		indices = list(range(0, len(dataset)))
-		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
+		# indices = list(range(0, len(dataset)))
+		indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
 
 		pred_hyp = tensor_to_sents(hyp , wordtoidx)  # hyp[indices]
 		pred_ref, all_dialog_files = split_to_responses(split)
@@ -271,14 +305,23 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 		
 		data, _, _, _ = get_files_joint(split)
 
+		# decode in individual vocabs
+		bs_pred = convert_bs_to_sent(bs_pred)
+		bs_act = convert_bs_to_sent(bs_act)
+		da_pred = convert_da_to_sent(da_pred)
+		da_act = convert_da_to_sent(da_act)
+
 		if method=='beam':
 			pred_file = open(args.log_path+'pred_beam_'+str(beam_size)+'_'+split+'.txt', 'w')
 		elif method=='greedy':
 			pred_file = open(args.log_path+'pred_greedy_'+split+'.txt', 'w')
 
 		pred_file.write('\n\n***'+split+'***')
-		for idx, h, r in zip(indices, pred_hyp, pred_ref):
+		for idx, bs_t, bs_p, da_t, da_p, h, r in zip(indices, bs_act, bs_pred, da_act, da_pred, pred_hyp, pred_ref):
+			# todo - add belief state and dialog act predictions too. 
 			pred_file.write('\n\nContext: \n'+str('\n'.join(data[idx][:-1])))
+			pred_file.write('\nBS Gold: '+str(bs_t)+'\nBS Pred: '+str(bs_p))
+			pred_file.write('\nDA Gold: '+str(da_t)+'\nDA Pred: '+str(da_p))
 			pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
 
 
@@ -318,14 +361,6 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		train_loss = train_epoch(model, epoch, args.batch_size, criterion, optimizer, scheduler)
 
 		val_loss_ground = get_loss_nograd(model, epoch, args.batch_size, criterion, 'val')
-
-		train_losses.append(train_loss)
-		val_losses.append(val_loss_ground)
-
-		if val_loss_ground < best_val_loss_ground:
-			best_val_loss_ground = val_loss_ground
-			logger.debug('==> New optimum found wrt val loss')
-			save_model(model, args, 'checkpoint_bestloss.pt',train_loss,val_loss_ground, -1)
 
 		# if epoch < 15:
 		# 	save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
@@ -488,7 +523,7 @@ ntokens=len(wordtoidx)
 
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
-# Use these in evaluation
+# Use these in evaluation - to convert predictions to total vocab
 d_to_imap = {}
 s_to_imap = {}
 a_to_imap = {}
@@ -604,7 +639,7 @@ if __name__ == '__main__':
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
 	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
 
-	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [SET++, HIER++]")
+	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [joint, action_pred]")
 
 	args = parser.parse_args()
 	run(args)

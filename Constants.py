@@ -25,6 +25,10 @@ V_domains_wtoi = dict((el,i) for i,el in enumerate(V_domains))
 V_slots_wtoi = dict((el,i) for i,el in enumerate(V_slots))
 V_actions_wtoi = dict((el,i) for i,el in enumerate(V_actions))
 
+V_domains_itow = {v:k for k,v in V_domains_wtoi.items()}
+V_slots_itow = {v:k for k,v in V_slots_wtoi.items()}
+V_actions_itow = {v:k for k,v in V_actions_wtoi.items()}
+
 used_levels = domains + functions + arguments
 #used_levels = functions + arguments
 act_len = len(used_levels)
