@@ -102,11 +102,12 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 
 		response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
-		# bs_logits - triplets, bs, V,  bs_target[0] - triplets, bs
+		# bs_logits - (triplets, bs, V) | bs_target[0] - (triplets, bs) - starts with sos
+		# bs_logits predicted for SOS - so bs_target[0][1:] is used for loss 
 
-		belief_loss=criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1))+criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
+		belief_loss=criterion(bs_logits[0][:-1].reshape(-1, len(Constants.V_domains)), bs_target[0][1:].reshape(-1)) + criterion(bs_logits[1][:-1].reshape(-1, len(Constants.V_slots)), bs_target[1][1:].reshape(-1))
 
-		da_loss=criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
+		da_loss=criterion(da_logits[0][:-1].reshape(-1, len(Constants.V_domains)), da_target[0][1:].reshape(-1))  + criterion(da_logits[1][:-1].reshape(-1, len(Constants.V_actions)), da_target[1][1:].reshape(-1))  + criterion(da_logits[2][:-1].reshape(-1, len(Constants.V_slots)), da_target[2][1:].reshape(-1))
 		
 		# print(response_loss, belief_loss, da_loss)	
 		cur_loss = response_loss+belief_loss+da_loss
@@ -158,9 +159,9 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 
 			response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
-			belief_loss=criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1))+criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
+			belief_loss=criterion(bs_logits[0][:-1].reshape(-1, len(Constants.V_domains)), bs_target[0][1:].reshape(-1)) + criterion(bs_logits[1][:-1].reshape(-1, len(Constants.V_slots)), bs_target[1][1:].reshape(-1))
 
-			da_loss=criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
+			da_loss=criterion(da_logits[0][:-1].reshape(-1, len(Constants.V_domains)), da_target[0][1:].reshape(-1))  + criterion(da_logits[1][:-1].reshape(-1, len(Constants.V_actions)), da_target[1][1:].reshape(-1))  + criterion(da_logits[2][:-1].reshape(-1, len(Constants.V_slots)), da_target[2][1:].reshape(-1))
 
 			cur_loss = response_loss+belief_loss+da_loss
 
@@ -242,7 +243,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					bs_pred = bs_output.transpose(0,1) # bs, 50 - with sos
 					bs_act = [bs_target[0].transpose(0,1), bs_target[1].transpose(0,1)] #bs,25 | bs,25
 
-					da_pred = da_output.transpose(0,1) # bs, 51					
+					da_pred = da_output.transpose(0,1) # bs, 51
 					da_act = [da_target[0].transpose(0,1), da_target[1].transpose(0,1), da_target[2].transpose(0,1)]
 				else:
 					hyp = torch.cat((hyp, output_max), dim=0)
@@ -252,7 +253,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					bs_act[0] = torch.cat([bs_act[0], bs_target[0].transpose(0,1)])
 					bs_act[1] = torch.cat([bs_act[1], bs_target[1].transpose(0,1)])
 
-					da_pred=torch.cat([da_pred, da_output[3:].transpose(0,1)])
+					da_pred=torch.cat([da_pred, da_output.transpose(0,1)])# bs, 51
 					da_act[0]=torch.cat([da_act[0], da_target[0].transpose(0,1)])
 					da_act[1]=torch.cat([da_act[1], da_target[1].transpose(0,1)])
 					da_act[2]=torch.cat([da_act[2], da_target[2].transpose(0,1)])
