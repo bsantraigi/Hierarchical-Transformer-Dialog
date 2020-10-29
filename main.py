@@ -109,7 +109,6 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 
 		da_loss=criterion(da_logits[0][:-1].reshape(-1, len(Constants.V_domains)), da_target[0][1:].reshape(-1))  + criterion(da_logits[1][:-1].reshape(-1, len(Constants.V_actions)), da_target[1][1:].reshape(-1))  + criterion(da_logits[2][:-1].reshape(-1, len(Constants.V_slots)), da_target[2][1:].reshape(-1))
 		
-		# print(response_loss, belief_loss, da_loss)	
 		cur_loss = response_loss+belief_loss+da_loss
 
 		loss = cur_loss / accumulated_steps
@@ -280,12 +279,11 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 		da_act = torch.cat([da_act[0].unsqueeze(-1), da_act[1].unsqueeze(-1), da_act[2].unsqueeze(-1)], dim=2).reshape(da_pred.shape[0], -1) # append alternatively
 		da_acc, da_hdsa_metrics = compute_da_metrics(da_pred, da_act)
 
-		# indices = list(range(0, len(dataset)))
-		indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
+		indices = list(range(0, len(dataset)))
+		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
 
 		pred_hyp = tensor_to_sents(hyp , wordtoidx)  # hyp[indices]
 		pred_ref, all_dialog_files = split_to_responses(split)
-		# pred_ref = pred_ref[:args.batch_size] # uncomment for 1 batch
 		
 		bleu_score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
 		f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
@@ -380,7 +378,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 
 		if val_bleu > best_val_bleu:
 			best_val_bleu = val_bleu
-			logger.debug('==> New optimum found wrt val bleu')
+			# logger.debug('==> New optimum found wrt val bleu')
 			save_model(model, args, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_bleu)
 		
 		if  val_criteria > best_criteria:
@@ -413,7 +411,7 @@ def save_model(model, args, name, train_loss, val_loss, val_bleu):
 	if val_bleu!=-1:
 		checkpoint['val_bleu']=val_bleu
 
-	logger.debug('==> Checkpointing everything now...in {}'.format(name))
+	# logger.debug('==> Checkpointing everything now...in {}'.format(name))
 	torch.save(checkpoint, args.log_path+name)
 
 
@@ -609,13 +607,13 @@ def run(args, optuna_callback=None):
 		evaluate_action_pred(model, args, criterion, optimizer, scheduler, 'test')
 		return
 
-	# best_val_loss_ground = load_model(model, args.log_path +'checkpoint_criteria.pt')
+	best_val_loss_ground = load_model(model, args.log_path +'checkpoint_criteria.pt')
 	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	logger.debug('Testing model\n')
 	_,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+	logger.debug('Test critiera: {:0.3f}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)

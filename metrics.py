@@ -24,7 +24,7 @@ def tensor_to_sents(data, wordtoidx): #2d tensor or list of tensors!
 def compute_bs_accuracy(pred, act):
 	total_actual = act.reshape(act.shape[0], -1, 2)
 	pred_l = pred.reshape(pred.shape[0], -1, 2) # N, triplets, 2
-	mask = ~((total_actual==Constants.PAD)|(total_actual==Constants.SOS)|(total_actual==Constants.EOS)) #dont compute for PAD/EOS/SOS
+	mask = ~((total_actual==Constants.PAD)|(total_actual==1)|(total_actual==2)) #dont compute for PAD/EOS/SOS - 1,2 are SOS, EOS in individual vocabs
 
 	temp = (total_actual==pred_l)*mask # N, triplets, 2
 	tp = (temp[:,:,0]*temp[:,:,1]).cpu().numpy().sum()
@@ -32,7 +32,7 @@ def compute_bs_accuracy(pred, act):
 	joint_acc = (2*tp)/total #/2 as each triplet is counted twice
 
 	slot_acc = temp.sum().cpu().numpy()/total
-	return joint_acc, slot_acc
+	return joint_acc*100, slot_acc*100
 
 
 def generate_hieract(act): # input - N, triplets, 3
@@ -55,16 +55,15 @@ def compute_da_metrics(pred, act): # begin from first triplet(no sos)
 	act_hieract = generate_hieract(act)
 	precision, recall, f1_score = compute_metrics_binary(pred_hieract.reshape(-1), act_hieract.reshape(-1))
 
-	mask = ~((act==Constants.PAD)|(act==Constants.SOS)|(act==Constants.EOS)) # Don't count pad or eos, won't have sos in actual da
-	act = act*mask
-	pred = pred*mask
+	mask = ~((act==Constants.PAD)|(act==1)|(act==2)) # Don't count pad or eos, won't have sos in actual da - 1,2 are SOS, EOS in individual vocabs
 
-	temp = act==pred
+	temp = (act==pred)*mask
 	tp = (temp[:,:,0]*temp[:,:,1]*temp[:,:,2]).cpu().numpy().sum()
 	total = np.count_nonzero((act*mask).cpu().numpy())
+
 	joint_acc = (3*tp)/total
 	slot_acc = temp.sum().cpu().numpy()/total
-	return (joint_acc, slot_acc), (precision, recall, f1_score)
+	return (joint_acc*100, slot_acc*100), (precision*100, recall*100, f1_score*100)
 
 
 def obtain_TP_TN_FN_FP(pred, act, TP, TN, FN, FP, elem_wise=False):
