@@ -105,9 +105,9 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 		# bs_logits - (triplets, bs, V) | bs_target[0] - (triplets, bs) - starts with sos
 		# bs_logits predicted for SOS - so bs_target[0][1:] is used for loss 
 
-		belief_loss=criterion(bs_logits[0][:-1].reshape(-1, len(Constants.V_domains)), bs_target[0][1:].reshape(-1)) + criterion(bs_logits[1][:-1].reshape(-1, len(Constants.V_slots)), bs_target[1][1:].reshape(-1))
+		belief_loss=criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1)) + criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
 
-		da_loss=criterion(da_logits[0][:-1].reshape(-1, len(Constants.V_domains)), da_target[0][1:].reshape(-1))  + criterion(da_logits[1][:-1].reshape(-1, len(Constants.V_actions)), da_target[1][1:].reshape(-1))  + criterion(da_logits[2][:-1].reshape(-1, len(Constants.V_slots)), da_target[2][1:].reshape(-1))
+		da_loss=criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
 		
 		cur_loss = response_loss+belief_loss+da_loss
 
@@ -158,9 +158,9 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 
 			response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
-			belief_loss=criterion(bs_logits[0][:-1].reshape(-1, len(Constants.V_domains)), bs_target[0][1:].reshape(-1)) + criterion(bs_logits[1][:-1].reshape(-1, len(Constants.V_slots)), bs_target[1][1:].reshape(-1))
+			belief_loss=criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1)) + criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
 
-			da_loss=criterion(da_logits[0][:-1].reshape(-1, len(Constants.V_domains)), da_target[0][1:].reshape(-1))  + criterion(da_logits[1][:-1].reshape(-1, len(Constants.V_actions)), da_target[1][1:].reshape(-1))  + criterion(da_logits[2][:-1].reshape(-1, len(Constants.V_slots)), da_target[2][1:].reshape(-1))
+			da_loss=criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
 
 			cur_loss = response_loss+belief_loss+da_loss
 
@@ -217,11 +217,11 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 				response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1)).item()				
 
-				bs_loss = criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0][1:].reshape(-1)) + criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1][1:].reshape(-1))
+				bs_loss = criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1)) + criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
 				bs_loss = bs_loss.item()
 
 
-				da_loss = criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0][1:].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1][1:].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2][1:].reshape(-1))
+				da_loss = criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
 				da_loss = da_loss.item()
 
 				cur_loss = response_loss+bs_loss+da_loss
@@ -353,7 +353,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 	logger.debug('At begin of training, Best val loss ground : {:0.7f} Best bleu: {:0.4f}, Best criteria: {:0.4f}'.format(best_val_loss_ground, best_val_bleu, best_criteria))
 	logger.debug('====> STARTING TRAINING NOW')
 
-	val_epoch_freq = 1
+	val_epoch_freq = 3
 	for epoch in range(1, args.epochs + 1):
 
 		epoch_start_time = time.time()
@@ -539,7 +539,7 @@ def run(args, optuna_callback=None):
 	if args.model_type=="action_pred":
 		log_path ='running/action_pred/'
 	elif args.model_type=="joint":
-		log_path ='running/transformer_joint/'
+		log_path ='running/transformer_joint_test/'
 	else:
 		print('Invalid model type')
 		raise ValueError
@@ -595,7 +595,7 @@ def run(args, optuna_callback=None):
 
 	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
 		
-	optimizer = torch.optim.Adam(model.parameters(), lr= 0.0001, betas=(0.9, 0.98), eps=1e-9)
+	optimizer = torch.optim.Adam(model.parameters(), lr= 0.00012, betas=(0.9, 0.98), eps=1e-9)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.98)
 
 	logger.debug('\n\n\n=====>\n')
@@ -607,7 +607,7 @@ def run(args, optuna_callback=None):
 		evaluate_action_pred(model, args, criterion, optimizer, scheduler, 'test')
 		return
 
-	best_val_loss_ground = load_model(model, args.log_path +'checkpoint_criteria.pt')
+	# best_val_loss_ground = load_model(model, args.log_path +'checkpoint_criteria.pt')
 	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
@@ -636,7 +636,7 @@ if __name__ == '__main__':
 
 	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
-	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
+	parser.add_argument("-e", "--epochs", default=40, type=int, help = "Give number of epochs")
 
 	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [joint, action_pred]")
 

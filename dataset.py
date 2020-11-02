@@ -109,8 +109,8 @@ def gen_dataset_joint(split_name): # [ no of turns , src, tgt, act_vecs, hierarc
 	
 	data = []
 	max_sent_len = 48
-	MBS=50 # belief state text input len
-	MDA=51 # dialog act text input len
+	MBS=51 # belief state text input len
+	MDA=52 # dialog act text input len
 	responses = []
 	''' 
 		# RESULTS - Train, valid, test
@@ -133,7 +133,7 @@ def gen_dataset_joint(split_name): # [ no of turns , src, tgt, act_vecs, hierarc
 			src.append(user)
 
 			bs_list=[]
-			bs = 'SOS SOS '
+			bs = 'SOS '
 			for domain, v_all in turn['BS'].items():# v_all is list of [slot_name, value] for that domain
 				for v in v_all:
 					# domain, slot_name1, domain, slot_name2,..
@@ -143,14 +143,14 @@ def gen_dataset_joint(split_name): # [ no of turns , src, tgt, act_vecs, hierarc
 			for ele in bs_list:
 				bs += ele[0] + " " + ele[1] + " "
 
-			bs += ' EOS EOS '			
+			bs += ' EOS '			
 			bs = bs + (MBS -len(bs.split()))*' PAD'
 			# In bs.split()- domains - bs[::2], slots-bs[1::2]
 			
 			# === use turn['KB'] # TODO
 
 			dialog_act_list=[]
-			dialog_act = 'SOS SOS SOS '
+			dialog_act = 'SOS '
 			if turn['act'] != "None":
 				for w in turn['act']:
 					d, f, s = w.split('-')
@@ -160,7 +160,7 @@ def gen_dataset_joint(split_name): # [ no of turns , src, tgt, act_vecs, hierarc
 
 			for da in dialog_act_list:
 				dialog_act +=  ' '.join(da) + " "
-			dialog_act += ' EOS EOS EOS '
+			dialog_act += ' EOS '
 			dialog_act = dialog_act + (MDA-len(dialog_act.split()))*' PAD'
 
 			context = src

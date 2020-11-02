@@ -38,7 +38,7 @@ def compute_bs_accuracy(pred, act):
 def generate_hieract(act): # input - N, triplets, 3
 	hieract = np.zeros((act.shape[0], 44))
 
-	for i, da in enumerate(act-3):
+	for i, da in enumerate(act-3): # -3 to remove pad,sos,eos
 		for d in da[:,0][da[:,0]>=0]:
 			hieract[i][d]=1
 		for a in da[:,1][da[:,1]>=0]:
@@ -47,7 +47,7 @@ def generate_hieract(act): # input - N, triplets, 3
 			hieract[i][s+17]=1
 	return hieract
 
-def compute_da_metrics(pred, act): # begin from first triplet(no sos) 
+def compute_da_metrics(pred, act): # begin from first triplet(no sos) in both - and in individual vocabs
 	act = act.reshape(act.shape[0], -1, 3) # N, triplets, 3
 	pred = pred.reshape(pred.shape[0], -1, 3) # N, triplets, 3
 
