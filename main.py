@@ -93,6 +93,9 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	accumulated_steps = 3
 	optimizer.zero_grad()
 
+	response_loss = torch.tensor([0], device=device)
+	da_loss=torch.tensor([0], device=device)
+
 	for i, (data, targets, labels, bs, da, bs_target, da_target) in enumerate(data_loader_acts(train, train_counter, train_bs, train_dialog_act, batch_size, wordtoidx)):
 
 		batch_size_curr = data.shape[1]
@@ -100,16 +103,17 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 
 		output, bs_logits , da_logits = model(data, bs, da, targets)
 
-		response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
+		# response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
 		# bs_logits - (triplets, bs, V) | bs_target[0] - (triplets, bs) - starts with sos
 		# bs_logits predicted for SOS - so bs_target[0][1:] is used for loss 
 
 		belief_loss=criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1)) + criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
 
-		da_loss=criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
+		# da_loss=criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
 		
-		cur_loss = response_loss+belief_loss+da_loss
+		# cur_loss = response_loss+belief_loss+da_loss
+		cur_loss = belief_loss
 
 		loss = cur_loss / accumulated_steps
 		loss.backward()
@@ -148,7 +152,10 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 	start_time = time.time()
 	ntokens = len(idxtoword)
 	
-	dataset, dataset_counter, dataset_bs, dataset_da = get_files_joint(split)	
+	dataset, dataset_counter, dataset_bs, dataset_da = get_files_joint(split)
+
+	response_loss = torch.tensor([0], device=device)
+	da_loss=torch.tensor([0], device=device)
 	
 	with torch.no_grad():
 		for i, (data, targets, labels, bs, da, bs_target, da_target) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, wordtoidx)):
@@ -156,13 +163,14 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 			batch_size_curr = data.shape[1]
 			output, bs_logits , da_logits = model(data, bs, da, targets)
 
-			response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
+			# response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
 			belief_loss=criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1)) + criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
 
-			da_loss=criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
+			# da_loss=criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
 
-			cur_loss = response_loss+belief_loss+da_loss
+			# cur_loss = response_loss+belief_loss+da_loss
+			cur_loss = belief_loss
 
 			total_loss += cur_loss.item()*batch_size_curr
 			total_response_loss += response_loss.item()*batch_size_curr
@@ -196,6 +204,9 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 	start = time.time()
 	nbatches = len(dataset)//batch_size
 
+	response_loss = torch.tensor([0], device=device)
+	da_loss=torch.tensor([0], device=device)
+
 	with torch.no_grad():
 		for i, (data, targets, labels, bs, da, bs_target, da_target) in enumerate(data_loader_acts(dataset,dataset_counter, dataset_bs, dataset_da , batch_size, wordtoidx)): # , total=len(dataset)//batch_size):
 
@@ -215,20 +226,19 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 			if torch.is_tensor(output): # greedy search
 
-				response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1)).item()				
+				# response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
 				bs_loss = criterion(bs_logits[0].reshape(-1, len(Constants.V_domains)), bs_target[0].reshape(-1)) + criterion(bs_logits[1].reshape(-1, len(Constants.V_slots)), bs_target[1].reshape(-1))
-				bs_loss = bs_loss.item()
 
 
-				da_loss = criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
-				da_loss = da_loss.item()
+				# da_loss = criterion(da_logits[0].reshape(-1, len(Constants.V_domains)), da_target[0].reshape(-1))  + criterion(da_logits[1].reshape(-1, len(Constants.V_actions)), da_target[1].reshape(-1))  + criterion(da_logits[2].reshape(-1, len(Constants.V_slots)), da_target[2].reshape(-1))
 
-				cur_loss = response_loss+bs_loss+da_loss
+				# cur_loss = (response_loss+bs_loss+da_loss).item()
+				cur_loss = bs_loss
 
-				total_response_loss += response_loss*batch_size_curr
-				total_bs_loss += bs_loss*batch_size_curr
-				total_da_loss += da_loss*batch_size_curr
+				total_response_loss += response_loss.item() *batch_size_curr
+				total_bs_loss += bs_loss.item() * batch_size_curr
+				total_da_loss += da_loss.item() * batch_size_curr
 
 				total_loss += cur_loss * batch_size_curr
 
@@ -285,8 +295,8 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 		pred_hyp = tensor_to_sents(hyp , wordtoidx)  # hyp[indices]
 		pred_ref, all_dialog_files = split_to_responses(split)
 		
-		bleu_score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
-		f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
+		# bleu_score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
+		# f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
 
 		total_loss = total_loss/len(dataset)
 		total_response_loss = total_response_loss/len(dataset)
@@ -300,7 +310,8 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 			else:
 				evaluate_dials[all_dialog_files[i]]=[h]
 
-		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
+		# matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
+		bleu_score, f1_entity, matches, successes = 0,0,0,0
 		
 		data, _, _, _ = get_files_joint(split)
 
@@ -320,8 +331,8 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 			# todo - add belief state and dialog act predictions too. 
 			pred_file.write('\n\nContext: \n'+str('\n'.join(data[idx][:-1])))
 			pred_file.write('\nBS Gold: '+str(bs_t)+'\nBS Pred: '+str(bs_p))
-			pred_file.write('\nDA Gold: '+str(da_t)+'\nDA Pred: '+str(da_p))
-			pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
+			# pred_file.write('\nDA Gold: '+str(da_t)+'\nDA Pred: '+str(da_p))
+			# pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
 
 
 	elapsed = time.time()-start
@@ -330,10 +341,10 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 	logger.debug('==>{}\tBelief state Joint acc: {:0.2f}\tSlot acc: {:0.2f}'.format(split,  bs_joint_acc, bs_slot_acc))
 
-	logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f} || HDSA precision: {:0.2f}  recall {:0.2f}  f1_score: {:0.2f}'.format(split, da_acc[0], da_acc[1], da_hdsa_metrics[0], da_hdsa_metrics[1], da_hdsa_metrics[2]))
+	# logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f} || HDSA precision: {:0.2f}  recall {:0.2f}  f1_score: {:0.2f}'.format(split, da_acc[0], da_acc[1], da_hdsa_metrics[0], da_hdsa_metrics[1], da_hdsa_metrics[2]))
 
-	criteria = bleu_score+0.5*(matches+successes)
-	logger.debug('==>{}\tBleu: {:0.2f}\tF1-Entity {:0.2f}\tInform {:0.2f}\tSuccesses: {:0.2f}\tCriteria: {:0.2f}'.format( split, bleu_score, f1_entity, matches, successes, criteria ))
+	# criteria = bleu_score+0.5*(matches+successes)
+	# logger.debug('==>{}\tBleu: {:0.2f}\tF1-Entity {:0.2f}\tInform {:0.2f}\tSuccesses: {:0.2f}\tCriteria: {:0.2f}'.format( split, bleu_score, f1_entity, matches, successes, criteria ))
 
 	return total_loss, bleu_score, f1_entity, matches, successes
 
@@ -595,7 +606,7 @@ def run(args, optuna_callback=None):
 
 	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
 		
-	optimizer = torch.optim.Adam(model.parameters(), lr= 0.00012, betas=(0.9, 0.98), eps=1e-9)
+	optimizer = torch.optim.Adam(model.parameters(), lr= 0.00015, betas=(0.9, 0.98), eps=1e-9)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.98)
 
 	logger.debug('\n\n\n=====>\n')
@@ -613,7 +624,7 @@ def run(args, optuna_callback=None):
 
 	logger.debug('Testing model\n')
 	_,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	logger.debug('Test critiera: {:0.3f}'.format(test_bleu+0.5*(test_matches+test_successes)))
+	# logger.debug('Test critiera: {:0.3f}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)
@@ -636,7 +647,7 @@ if __name__ == '__main__':
 
 	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
-	parser.add_argument("-e", "--epochs", default=40, type=int, help = "Give number of epochs")
+	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
 
 	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [joint, action_pred]")
 
