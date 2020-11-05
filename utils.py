@@ -65,30 +65,13 @@ def data_gen_acts(dataset, dataset_bs, dataset_da, batch_size, i, wordtoidx):
     tokenized_seq = []
     tokenized_bs = []
     tokenized_da = []
-    bs_output = []
-    da_output = []
+
     for d, bs, da in zip(dataset[i:upper_bound], dataset_bs[i:upper_bound], dataset_da[i:upper_bound]):
 #         print(len(d), end=' ')
         tokenized_seq.append([[wordtoidx.get(word, 1) for word in tokenize_en(sent)] for sent in d])
         tokenized_bs.append([wordtoidx.get(word, 1) for word in tokenize_en(bs)[:-1]])
         tokenized_da.append([wordtoidx.get(word, 1) for word in tokenize_en(da)[:-1]])
-        bs_output.extend(bs.split()[1:]) # combine for all samples, split later
-        da_output.extend(da.split()[1:])
 
-    bs_output=[[Constants.V_domains_wtoi[w] for w in bs_output[::2]],
-               [Constants.V_slots_wtoi[w] for w in bs_output[1::2]]]
-
-    # 2, 25, batch_size
-    bs_output = torch.tensor(bs_output, device=device) # 2, bs*triplets
-    bs_output = bs_output.reshape(2, batch_size, -1).transpose(1, 2)
-
-    da_output=[[Constants.V_domains_wtoi[w] for w in da_output[::3]], 
-               [Constants.V_actions_wtoi[w] for w in da_output[1::3]],
-               [Constants.V_slots_wtoi[w] for w in da_output[2::3]] ]
-
-    # 3, 17, batch_size
-    da_output = torch.tensor(da_output, device=device) # 3, bs*triplets
-    da_output = da_output.reshape(3, batch_size, -1).transpose(1,2)
 
     seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in tokenized_seq])
     seq_tensor = torch.zeros(batch_size, max_dial_len, max_sent_len, device=device)
@@ -112,8 +95,7 @@ def data_gen_acts(dataset, dataset_bs, dataset_da, batch_size, i, wordtoidx):
     target_tensor = target_tensor.transpose(0,1)
     label_tensor = label_tensor.transpose(0,1)
 
-    # no sos in bs_output and da_output
-    return seq_tensor.long(), target_tensor.long(), label_tensor.long(), bs_tensor.long(), da_tensor.long(), bs_output.long(), da_output.long()
+    return seq_tensor.long(), target_tensor.long(), label_tensor.long(), bs_tensor.long(), da_tensor.long()
 
 
 def data_loader_acts(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, wordtoidx): 

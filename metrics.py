@@ -14,7 +14,7 @@ max_sent_len = 50
 def tensor_to_sents(data, wordtoidx): #2d tensor or list of tensors!
 #     return [' '.join([idxtoword[e.item()] for e in line) for line in data]
     sents=[]
-    eos_index = 3 # wordtoidx['EOS']
+    eos_index = Constants.EOS # wordtoidx['EOS']
     idxtoword = {v:k for k,v in wordtoidx.items()}
     for line in data:
         l = (line==eos_index).nonzero()[0].item()+1 if (line==eos_index).any() else max_sent_len
@@ -24,7 +24,7 @@ def tensor_to_sents(data, wordtoidx): #2d tensor or list of tensors!
 def compute_bs_accuracy(pred, act):
 	total_actual = act.reshape(act.shape[0], -1, 2)
 	pred_l = pred.reshape(pred.shape[0], -1, 2) # N, triplets, 2
-	mask = ~((total_actual==Constants.PAD)|(total_actual==1)|(total_actual==2)) #dont compute for PAD/EOS/SOS - 1,2 are SOS, EOS in individual vocabs
+	mask = ~((total_actual==Constants.PAD)|(total_actual==2)|(total_actual==3)) #dont compute for PAD/EOS/SOS - 2,3 are SOS, EOS in total vocab
 
 	temp = (total_actual==pred_l)*mask # N, triplets, 2
 	tp = (temp[:,:,0]*temp[:,:,1]).cpu().numpy().sum()
@@ -51,11 +51,12 @@ def compute_da_metrics(pred, act): # begin from first triplet(no sos) in both - 
 	act = act.reshape(act.shape[0], -1, 3) # N, triplets, 3
 	pred = pred.reshape(pred.shape[0], -1, 3) # N, triplets, 3
 
-	pred_hieract = generate_hieract(pred)
-	act_hieract = generate_hieract(act)
-	precision, recall, f1_score = compute_metrics_binary(pred_hieract.reshape(-1), act_hieract.reshape(-1))
+	# pred_hieract = generate_hieract(pred)
+	# act_hieract = generate_hieract(act)
+	# precision, recall, f1_score = compute_metrics_binary(pred_hieract.reshape(-1), act_hieract.reshape(-1))
+	precision, recall, f1_score =0,0,0	
 
-	mask = ~((act==Constants.PAD)|(act==1)|(act==2)) # Don't count pad or eos, won't have sos in actual da - 1,2 are SOS, EOS in individual vocabs
+	mask = ~((act==Constants.PAD)|(act==2)|(act==3)) # Don't count pad or eos, won't have sos in actual da - 2,3 are SOS, EOS in total vocab
 
 	temp = (act==pred)*mask
 	tp = (temp[:,:,0]*temp[:,:,1]*temp[:,:,2]).cpu().numpy().sum()
