@@ -191,7 +191,7 @@ class Joint_model(nn.Module):
 		da_pad_mask = (da==0).transpose(0,1)
 		da = self.encoder(da)*math.sqrt(self.ninp) # length , bs, embed
 		da= self.pos_encoder(da)
-		pred_da = self.da_decoder(da, torch.cat([memory,belief]), tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)[-1].unsqueeze(0) # 1, bs, embed
+		pred_da = self.da_decoder(da, torch.cat([belief, memory]), tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)[-1].unsqueeze(0) # 1, bs, embed
 
 		if length%3==1:
 			pred_da = self.linear_d(pred_da) # 1,bs, Vdomain
@@ -209,7 +209,7 @@ class Joint_model(nn.Module):
 		tgt_pad_mask = (tgt==0).transpose(0,1)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
 		tgt = self.pos_encoder(tgt)
-		output = self.response_decoder(tgt, torch.cat([memory, belief, da]), tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
+		output = self.response_decoder(tgt, torch.cat([da, memory]), tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
 		output = self.decoder(output)[-1,:,:].unsqueeze(0)
 		output_max = torch.max(output, dim=2)[1]
 		return output, output_max
@@ -257,6 +257,7 @@ class Joint_model(nn.Module):
 		bs_mask = _gen_mask_sent(belief.shape[0])
 		bs_pad_mask = (belief==0).transpose(0,1)
 		belief_memory = self.encoder(belief)*math.sqrt(self.ninp) # 2*max_triplets, bs, embed
+		belief_memory = self.pos_encoder(belief_memory)
 
 		# Generate dialog act
 		da_logits = [torch.empty(size=(17, batch_size, len(Constants.V_domains))), torch.empty(size=(17, batch_size, len(Constants.V_actions))), torch.empty(size=(17, batch_size, len(Constants.V_slots)))]
@@ -276,6 +277,7 @@ class Joint_model(nn.Module):
 		da_mask = _gen_mask_sent(da.shape[0])
 		da_pad_mask = (da==0).transpose(0,1)
 		da_memory = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
+		da_memory = self.pos_encoder(da_memory)
 
 		# Generate response
 		for i in range(1, max_sent_len+1): # predict 48 words + sos+eos=50
