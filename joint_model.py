@@ -75,10 +75,6 @@ class Joint_model(nn.Module):
 		
 		self.ninp = ninp
 
-		self.linear_d = nn.Linear(self.ninp, len(Constants.V_domains))
-		self.linear_s = nn.Linear(self.ninp, len(Constants.V_slots))
-		self.linear_a = nn.Linear(self.ninp, len(Constants.V_actions))
-
 		self.mask_func = _gen_mask_hierarchical
 		# self.max_sent_len = tgt_mask.size(0)
 		self._reset_parameters()
@@ -140,32 +136,21 @@ class Joint_model(nn.Module):
 		bs_mask = _gen_mask_sent(belief.shape[0])
 		bs_pad_mask = (belief==0).transpose(0,1)
 		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*max_triplets, bs, embed
-		pred_belief = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask) # 2*max_triplets, bs, embed
-		pred_belief = pred_belief.transpose(0,1).reshape(batch_size, -1, 2*self.ninp).transpose(0,1) # max_triplets, bs, 2*embed
-		
-		pred_belief_domains = self.linear_d(pred_belief[:,:, :self.ninp]) # max_triplets,bs, Vdomain
-		pred_belief_slots = self.linear_s(pred_belief[:,:, self.ninp: ]) # max_triplets, bs, Vslots
-		out_belief = [pred_belief_domains, pred_belief_slots]
+		pred_belief = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask) # length=50/n, bs, embed
 
 		# Dialog Act decoder
 		da_mask = _gen_mask_sent(da.shape[0])
 		da_pad_mask = (da==0).transpose(0,1)
 		da = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
-		pred_da = self.da_decoder(da, torch.cat([memory,belief]) , tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)
-
-		pred_da = pred_da.transpose(0,1).reshape(batch_size, -1, 3*self.ninp).transpose(0,1) # max_triplets, bs, 3
-		pred_da_domains = self.linear_d(pred_da[:,:,:self.ninp]) # max_triplets, bs, Vdomain
-		pred_da_actions = self.linear_a(pred_da[:,:,self.ninp:2*self.ninp]) #max_triplets, bs Vactions
-		pred_da_slots = self.linear_s(pred_da[:,:,2*self.ninp:]) # max_triplets, bs, Vslots
-		out_da = [pred_da_domains, pred_da_actions, pred_da_slots]
+		pred_da = self.da_decoder(da, torch.cat([pred_belief, memory]) , tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)
 
 		# Response decoder - 
 		# tgt shape - (msl, batch_size, embed)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
 		tgt = self.pos_encoder(tgt)
-		output = self.response_decoder(tgt, torch.cat([memory, belief, da]), tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
+		output = self.response_decoder(tgt, torch.cat([pred_da, memory]), tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
 		output = self.decoder(output)
-		return output, out_belief, out_da
+		return output, pred_belief, pred_da
 
 	def decode_belief_state(self, belief, memory): # pass curr_belief - length, bs
 		length, batch_size = belief.shape
