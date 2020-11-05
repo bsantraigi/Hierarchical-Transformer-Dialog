@@ -140,6 +140,7 @@ class Joint_model(nn.Module):
 		bs_mask = _gen_mask_sent(belief.shape[0])
 		bs_pad_mask = (belief==0).transpose(0,1)
 		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*max_triplets, bs, embed
+		belief = self.pos_encoder(belief)
 		belief = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask) # 2*max_triplets, bs, embed
 		pred_belief = belief.transpose(0,1).reshape(batch_size, -1, 2*self.ninp).transpose(0,1) # max_triplets, bs, 2*embed
 		
@@ -151,6 +152,7 @@ class Joint_model(nn.Module):
 		da_mask = _gen_mask_sent(da.shape[0])
 		da_pad_mask = (da==0).transpose(0,1)
 		da = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
+		da = self.pos_encoder(da)
 		da = self.da_decoder(da, torch.cat([belief, memory]) , tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)
 
 		pred_da = da.transpose(0,1).reshape(batch_size, -1, 3*self.ninp).transpose(0,1) # max_triplets, bs, 3
