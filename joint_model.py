@@ -175,6 +175,7 @@ class Joint_model(nn.Module):
 		bs_pad_mask = (belief==0).transpose(0,1)
 
 		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*triplets, bs, embed
+		belief = self.pos_encoder(belief)
 		pred_belief = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask)[-1].unsqueeze(0) # length, bs,embed -> 1, bs, embed
 		if length%2==1:
 			pred_belief = self.linear_d(pred_belief) #1, bs, Vdomain
@@ -189,6 +190,7 @@ class Joint_model(nn.Module):
 		da_mask = _gen_mask_sent(da.shape[0])
 		da_pad_mask = (da==0).transpose(0,1)
 		da = self.encoder(da)*math.sqrt(self.ninp) # length , bs, embed
+		da= self.pos_encoder(da)
 		pred_da = self.da_decoder(da, torch.cat([memory,belief]), tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)[-1].unsqueeze(0) # 1, bs, embed
 
 		if length%3==1:
