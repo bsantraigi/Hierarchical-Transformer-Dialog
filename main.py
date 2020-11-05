@@ -539,7 +539,7 @@ def run(args, optuna_callback=None):
 	if args.model_type=="action_pred":
 		log_path ='running/action_pred/'
 	elif args.model_type=="joint":
-		log_path ='running/transformer_joint_test/'
+		log_path ='running/joint_simple/'
 	else:
 		print('Invalid model type')
 		raise ValueError
@@ -636,7 +636,7 @@ if __name__ == '__main__':
 
 	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
-	parser.add_argument("-e", "--epochs", default=1, type=int, help = "Give number of epochs")
+	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
 
 	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [joint, action_pred]")
 
