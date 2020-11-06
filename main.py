@@ -182,6 +182,14 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 				evaluate_dials[all_dialog_files[i]].append(h)
 			else:
 				evaluate_dials[all_dialog_files[i]]=[h]
+				
+		# Save model predictions to json also for later evaluation
+		if method=='beam':
+			model_turns_file = args.log_path+'model_turns_beam_'+str(beam_size)+'_'+split+'.json'
+		elif method=='greedy':
+			model_turns_file = args.log_path+'model_turns_greedy_'+split+'.json'
+		with open(model_turns_file, 'w') as f:
+			json.dump(evaluate_dials, f)
 		
 		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
 
@@ -468,7 +476,7 @@ def run(args, optuna_callback=None):
 	logger.debug('\n\n\n=====>\n')
 
 	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
-	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	method = 'greedy'
@@ -481,7 +489,7 @@ def run(args, optuna_callback=None):
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)
-	# test_split('test', model, args, criterion)
+	test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	return val_bleu+0.5*(val_matches+val_successes)
