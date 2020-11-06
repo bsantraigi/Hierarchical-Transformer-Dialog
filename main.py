@@ -50,32 +50,6 @@ def get_files_joint(split): # dataset, dataset_counter, dataset_bs, dataset_da
 	return ValueError
 	
 
-def convert_bs_to_sent(data): # bs, 50
-	data = data.cpu().numpy()
-	res = []
-	sent_len = data.shape[1]
-	for sent in data:
-		curr = ""
-		for i in range(0, sent_len, 2):
-			curr += Constants.V_domains_itow[sent[i]] + " "+  Constants.V_slots_itow[sent[i+1]] + " "
-			if sent[i]==2:
-				break
-		res.append([curr])
-	return res
-
-def convert_da_to_sent(data): # bs, 51
-	data = data.cpu().numpy()
-	res = []
-	sent_len = data.shape[1]
-	for sent in data:
-		curr = ""
-		for i in range(0, sent_len, 3):
-			curr += Constants.V_domains_itow[sent[i]] + " "+ Constants.V_actions_itow[sent[i+1]]  +" "+Constants.V_slots_itow[sent[i+2]] +" "
-			if sent[i]==2:
-				break
-		res.append([curr])
-	return res
-
 def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # losses per batch
 	model.train()
 	total_loss =0
@@ -93,24 +67,24 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	accumulated_steps = 3
 	optimizer.zero_grad()
 
-	response_loss = torch.tensor([0], device=device)
-	da_loss=torch.tensor([0], device=device)
+	# response_loss = torch.tensor([0], device=device)
+	# da_loss=torch.tensor([0], device=device)
 
-	for i, (data, targets, labels, bs, da) in enumerate(data_loader_acts(train, train_counter, train_bs, train_dialog_act, batch_size, wordtoidx)):
+	for i, (data, targets, labels, bs, da) in enumerate(data_loader(train, train_counter, train_bs, train_dialog_act, batch_size, wordtoidx)):
 
 		batch_size_curr = data.shape[1]
 		# optimizer.zero_grad()
 
 		output, bs_logits , da_logits = model(data, bs, da, targets)
 
-		# response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
+		response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
 		belief_loss=criterion(bs_logits[:-1].reshape(-1, ntokens), bs[1:].reshape(-1))
 
-		# da_loss=criterion(da_logits[:-1].reshape(-1, ntokens), da[1:].reshape(-1))  
+		da_loss=criterion(da_logits[:-1].reshape(-1, ntokens), da[1:].reshape(-1))  
 		
-		# cur_loss = response_loss+belief_loss+da_loss
-		cur_loss = belief_loss
+		cur_loss = response_loss+belief_loss+da_loss
+		# cur_loss = belief_loss
 
 		loss = cur_loss / accumulated_steps
 		loss.backward()
@@ -120,7 +94,6 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 		if i%accumulated_steps==0:
 			optimizer.step()
 			optimizer.zero_grad()
-
 
 		total_loss += cur_loss.item()*batch_size_curr
 		total_response_loss += response_loss.item()*batch_size_curr
@@ -151,23 +124,23 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 	
 	dataset, dataset_counter, dataset_bs, dataset_da = get_files_joint(split)
 
-	response_loss = torch.tensor([0], device=device)
-	da_loss=torch.tensor([0], device=device)
+	# response_loss = torch.tensor([0], device=device)
+	# da_loss=torch.tensor([0], device=device)
 	
 	with torch.no_grad():
-		for i, (data, targets, labels, bs, da) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, wordtoidx)):
+		for i, (data, targets, labels, bs, da) in enumerate(data_loader(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, wordtoidx)):
 
 			batch_size_curr = data.shape[1]
 			output, bs_logits , da_logits = model(data, bs, da, targets)
 
-			# response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
+			response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
 			belief_loss=criterion(bs_logits[:-1].reshape(-1, ntokens), bs[1:].reshape(-1))
 
-			# da_loss=criterion(da_logits[:-1].reshape(-1, ntokens), da[1:].reshape(-1))  
+			da_loss=criterion(da_logits[:-1].reshape(-1, ntokens), da[1:].reshape(-1))  
 
-			# cur_loss = response_loss+belief_loss+da_loss
-			cur_loss = belief_loss
+			cur_loss = response_loss+belief_loss+da_loss
+			# cur_loss = belief_loss
 
 			total_loss += cur_loss.item()*batch_size_curr
 			total_response_loss += response_loss.item()*batch_size_curr
@@ -205,7 +178,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 	da_loss=torch.tensor([0], device=device)
 
 	with torch.no_grad():
-		for i, (data, targets, labels, bs, da) in enumerate(data_loader_acts(dataset,dataset_counter, dataset_bs, dataset_da , batch_size, wordtoidx)): # , total=len(dataset)//batch_size):
+		for i, (data, targets, labels, bs, da) in enumerate(data_loader(dataset,dataset_counter, dataset_bs, dataset_da , batch_size, wordtoidx)): # , total=len(dataset)//batch_size):
 
 			batch_size_curr = targets.shape[1]
 
@@ -222,20 +195,20 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap])
 
 			if torch.is_tensor(output): # greedy search
-				print(bs_logits.shape, bs.shape)
+				# print(bs_logits.shape, bs.shape) - torch.Size([49, 32, 1515]) torch.Size([50, 32])
 				bs_loss = criterion(bs_logits.reshape(-1, ntokens), bs[1:].reshape(-1)) 
 
-				# da_loss = criterion(da_logits.reshape(-1, ntokens), da[1:].reshape(-1))
-				# response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
+				da_loss = criterion(da_logits.reshape(-1, ntokens), da[1:].reshape(-1))
+				response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
-				# cur_loss = (response_loss+bs_loss+da_loss).item()
-				cur_loss = bs_loss
+				cur_loss = (response_loss+bs_loss+da_loss)
+				# cur_loss = bs_loss
 
-				total_response_loss += response_loss.item() *batch_size_curr
+				total_response_loss += response_loss.item() * batch_size_curr
 				total_bs_loss += bs_loss.item() * batch_size_curr
 				total_da_loss += da_loss.item() * batch_size_curr
 
-				total_loss += cur_loss * batch_size_curr
+				total_loss += cur_loss.item() * batch_size_curr
 
 				# output = torch.max(output, dim=2)[1]
 				output_max = post_process(output_max.transpose(0,1))
@@ -285,8 +258,8 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 		pred_hyp = tensor_to_sents(hyp , wordtoidx)  # hyp[indices]
 		pred_ref, all_dialog_files = split_to_responses(split)
 		
-		# bleu_score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
-		# f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
+		bleu_score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
+		f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
 
 		total_loss = total_loss/len(dataset)
 		total_response_loss = total_response_loss/len(dataset)
@@ -300,7 +273,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 			else:
 				evaluate_dials[all_dialog_files[i]]=[h]
 
-		# matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
+		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
 		bleu_score, f1_entity, matches, successes = 0,0,0,0
 		
 		data, _, _, _ = get_files_joint(split)
@@ -320,8 +293,8 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 		for idx, bs_t, bs_p, da_t, da_p, h, r in zip(indices, bs_act, bs_pred, da_act, da_pred, pred_hyp, pred_ref): 
 			pred_file.write('\n\nContext: \n'+str('\n'.join(data[idx][:-1])))
 			pred_file.write('\nBS Gold: '+str(bs_t)+'\nBS Pred: '+str(bs_p))
-			# pred_file.write('\nDA Gold: '+str(da_t)+'\nDA Pred: '+str(da_p))
-			# pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
+			pred_file.write('\nDA Gold: '+str(da_t)+'\nDA Pred: '+str(da_p))
+			pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
 
 
 	elapsed = time.time()-start
@@ -330,10 +303,10 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 	logger.debug('==>{}\tBelief state Joint acc: {:0.2f}\tSlot acc: {:0.2f}'.format(split,  bs_joint_acc, bs_slot_acc))
 
-	# logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f} || HDSA precision: {:0.2f}  recall {:0.2f}  f1_score: {:0.2f}'.format(split, da_acc[0], da_acc[1], da_hdsa_metrics[0], da_hdsa_metrics[1], da_hdsa_metrics[2]))
+	logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f} || HDSA precision: {:0.2f}  recall {:0.2f}  f1_score: {:0.2f}'.format(split, da_acc[0], da_acc[1], da_hdsa_metrics[0], da_hdsa_metrics[1], da_hdsa_metrics[2]))
 
-	# criteria = bleu_score+0.5*(matches+successes)
-	# logger.debug('==>{}\tBleu: {:0.2f}\tF1-Entity {:0.2f}\tInform {:0.2f}\tSuccesses: {:0.2f}\tCriteria: {:0.2f}'.format( split, bleu_score, f1_entity, matches, successes, criteria ))
+	criteria = bleu_score+0.5*(matches+successes)
+	logger.debug('==>{}\tBleu: {:0.2f}\tF1-Entity {:0.2f}\tInform {:0.2f}\tSuccesses: {:0.2f}\tCriteria: {:0.2f}'.format( split, bleu_score, f1_entity, matches, successes, criteria ))
 
 	return total_loss, bleu_score, f1_entity, matches, successes
 
@@ -353,13 +326,17 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 	logger.debug('At begin of training, Best val loss ground : {:0.7f} Best bleu: {:0.4f}, Best criteria: {:0.4f}'.format(best_val_loss_ground, best_val_bleu, best_criteria))
 	logger.debug('====> STARTING TRAINING NOW')
 
-	val_epoch_freq = 3
+	val_epoch_freq = 2
 	for epoch in range(1, args.epochs + 1):
 
 		epoch_start_time = time.time()
 		train_loss = train_epoch(model, epoch, args.batch_size, criterion, optimizer, scheduler)
 
 		val_loss_ground = get_loss_nograd(model, epoch, args.batch_size, criterion, 'val')
+
+		if val_loss_ground < best_val_loss_ground:
+			best_val_loss_ground=val_loss_ground
+			save_model(model, args, 'checkpoint_bestloss.pt',train_loss, val_loss_ground, -1)
 
 		# if epoch < 15:
 		# 	save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
@@ -376,24 +353,24 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		if optuna_callback is not None:
 			optuna_callback(epoch/val_epoch_freq, val_criteria) # Pass the score metric on validation set here.
 
-		if val_bleu > best_val_bleu:
-			best_val_bleu = val_bleu
-			# logger.debug('==> New optimum found wrt val bleu')
-			save_model(model, args, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_bleu)
+		# if val_bleu > best_val_bleu:
+		# 	best_val_bleu = val_bleu
+		# 	# logger.debug('==> New optimum found wrt val bleu')
+		# 	save_model(model, args, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_criteria)
 		
 		if  val_criteria > best_criteria:
 			best_criteria = val_criteria
 			best_model = model
 			logger.debug('==> New optimum found wrt val criteria')
-			save_model(model, args, 'checkpoint_criteria.pt',train_loss, val_loss_ground, val_bleu)
+			save_model(model, args, 'checkpoint_criteria.pt',train_loss, val_loss_ground, val_criteria)
 
-		save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, val_bleu)
+		save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, val_criteria)
 		scheduler.step()
 	
 	return best_model
 
 
-def save_model(model, args, name, train_loss, val_loss, val_bleu):
+def save_model(model, args, name, train_loss, val_loss, val_criteria):
 	checkpoint = {
 					'model': model.state_dict(),
 					'embedding_size': args.embedding_size,
@@ -408,8 +385,8 @@ def save_model(model, args, name, train_loss, val_loss, val_bleu):
 		checkpoint['train_loss']=train_loss
 	if val_loss!=-1:
 		checkpoint['val_loss']=val_loss
-	if val_bleu!=-1:
-		checkpoint['val_bleu']=val_bleu
+	if val_criteria!=-1:
+		checkpoint['val_criteria']=val_criteria
 
 	# logger.debug('==> Checkpointing everything now...in {}'.format(name))
 	torch.save(checkpoint, args.log_path+name)
@@ -447,9 +424,9 @@ def load_model(model, checkpoint='checkpoint.pt'):
 				# best_val_loss_ground= get_loss_nograd(model, 0, args.batch_size, criterion, 'val')
 				
 
-			if(checkpoint.get('val_bleu')):
-				best_val_bleu = checkpoint.get('val_bleu')
-				logger.debug('Valid bleu of Loaded model is: {:0.4f}'.format(best_val_bleu))
+			if(checkpoint.get('val_criteria')):
+				best_val_bleu = checkpoint.get('val_criteria')
+				logger.debug('Valid criteria of Loaded model is: {:0.4f}'.format(best_val_bleu))
 
 			logger.debug('Loaded model, Val loss(ground): {:0.8f}'.format(best_val_loss_ground))
 		except Exception as e:
@@ -595,7 +572,7 @@ def run(args, optuna_callback=None):
 
 	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
 		
-	optimizer = torch.optim.Adam(model.parameters(), lr= 0.00015, betas=(0.9, 0.98), eps=1e-9)
+	optimizer = torch.optim.Adam(model.parameters(), lr= 0.000125, betas=(0.9, 0.98), eps=1e-9)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.98)
 
 	logger.debug('\n\n\n=====>\n')

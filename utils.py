@@ -57,7 +57,7 @@ def Rand(start, end, num):
 
 
 # class batch from annotated transformer with acts
-def data_gen_acts(dataset, dataset_bs, dataset_da, batch_size, i, wordtoidx):
+def data_gen(dataset, dataset_bs, dataset_da, batch_size, i, wordtoidx):
     # print(i, len(dataset))
     max_dial_len = len(dataset[i])-1
 
@@ -98,14 +98,14 @@ def data_gen_acts(dataset, dataset_bs, dataset_da, batch_size, i, wordtoidx):
     return seq_tensor.long(), target_tensor.long(), label_tensor.long(), bs_tensor.long(), da_tensor.long()
 
 
-def data_loader_acts(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, wordtoidx): 
+def data_loader(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, wordtoidx): 
     # return batches according to dialog len, -> all similar at once
     # do mask also for these
     prev=0
     for dial_len, val in dataset_counter.items():
         for i in range(prev, prev+val, batch_size):
 #             print(i, min(batch_size, prev+val-i))
-            yield data_gen_acts(dataset, dataset_bs, dataset_da, min(batch_size, prev+val-i), i, wordtoidx)
+            yield data_gen(dataset, dataset_bs, dataset_da, min(batch_size, prev+val-i), i, wordtoidx)
         #     break # uncomment both break to run 1 batch for SET++,HIER++,joint models
         # break
         prev += val

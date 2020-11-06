@@ -35,11 +35,11 @@ Number of heads in each encoder/decoder
 
 ### Reproducability:
 
-For SET/HIER/MAT:
-python main.py
+For Joint model:(model code in joint_model.py)
+Run python main.py
 
-For SET++/HIER++:
-python main_acts.py
+HDSA Dialog action prediction(model code in model.py)
+python main.py -model_type action_pred
 
 
 
