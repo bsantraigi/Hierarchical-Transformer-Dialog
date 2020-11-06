@@ -274,7 +274,6 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 				evaluate_dials[all_dialog_files[i]]=[h]
 
 		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
-		bleu_score, f1_entity, matches, successes = 0,0,0,0
 		
 		data, _, _, _ = get_files_joint(split)
 
