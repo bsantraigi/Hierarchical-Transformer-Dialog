@@ -3,20 +3,23 @@ from collections import Counter
 from nltk.util import ngrams
 import json, numpy as np
 
+from tokenizers import ByteLevelBPETokenizer, Tokenizer
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # print(device)
 
 max_sent_len = 50
 
 
-def tensor_to_sents(data, wordtoidx): #2d tensor or list of tensors!
+def tensor_to_sents(data, tokenizer): #2d tensor or list of tensors!
 #     return [' '.join([idxtoword[e.item()] for e in line) for line in data]
     sents=[]
-    eos_index = 3 # wordtoidx['EOS']
-    idxtoword = {v:k for k,v in wordtoidx.items()}
+    eos_index = tokenizer.get_vocab()["EOS"] # wordtoidx['EOS']
+    # idxtoword = {v:k for k,v in wordtoidx.items()}
     for line in data:
         l = (line==eos_index).nonzero()[0].item()+1 if (line==eos_index).any() else max_sent_len
-        sents.append(' '.join([idxtoword[e.item()] for e in line[:l]]))
+        # sents.append(' '.join([idxtoword[e.item()] for e in line[:l]]))
+        sents.append(tokenizer.decode(line.long()[:l].tolist()))
     return sents
 
 
@@ -50,13 +53,13 @@ class F1Scorer(object):
 	def __init__(self):
 		pass
 
-	def score(self, old_hypothesis, old_corpus, wordtoidx):
+	def score(self, old_hypothesis, old_corpus, tokenizer):
 		hypothesis = []
 		corpus = []
 		if torch.is_tensor(old_hypothesis) or torch.is_tensor(old_hypothesis[0]):
-			old_hypothesis = tensor_to_sents(old_hypothesis, wordtoidx)
+			old_hypothesis = tensor_to_sents(old_hypothesis, tokenizer)
 		if torch.is_tensor(old_corpus):
-			old_corpus = tensor_to_sents(old_corpus, wordtoidx)
+			old_corpus = tensor_to_sents(old_corpus, tokenizer)
 
 		for h, c in zip(old_hypothesis, old_corpus):
 			# print(h, '\n',  c, '\n\n')
@@ -105,13 +108,13 @@ class BLEUScorer(object):
 	def __init__(self):
 		pass
 
-	def score(self, old_hypothesis, old_corpus,wordtoidx,  n=1):
+	def score(self, old_hypothesis, old_corpus,tokenizer,  n=1):
 		hypothesis = []
 		corpus = []
 		if torch.is_tensor(old_hypothesis) or torch.is_tensor(old_hypothesis[0]):
-			old_hypothesis = tensor_to_sents(old_hypothesis, wordtoidx)
+			old_hypothesis = tensor_to_sents(old_hypothesis, tokenizer)
 		if torch.is_tensor(old_corpus):
-			old_corpus = tensor_to_sents(old_corpus, wordtoidx)
+			old_corpus = tensor_to_sents(old_corpus, tokenizer)
 
 		for h, c in zip(old_hypothesis, old_corpus):
 			# print(h, '\n',  c, '\n\n')

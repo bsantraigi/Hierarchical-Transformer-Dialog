@@ -26,6 +26,8 @@ from evaluate import evaluateModel
 import Constants
 import argparse
 
+from tokenizers import ByteLevelBPETokenizer, Tokenizer
+
 if not os.path.isdir('running'):
 	os.makedirs('running')
 
@@ -54,21 +56,21 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	model.train()
 	total_loss =0
 	start_time = time.time()
-	ntokens = len(idxtoword)
+	ntokens = len(tokenizer.get_vocab())
 	nbatches = len(train)//batch_size
 	
-#     if torch.cuda.is_available():
-#         stat_cuda('before epoch')
+#	 if torch.cuda.is_available():
+#		 stat_cuda('before epoch')
 		
 	score=0
 	total_bleu_score=0
 	accumulated_steps = 3
 	optimizer.zero_grad()
 
-	for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(train, train_counter, train_hierarchial_actvecs, batch_size, wordtoidx)), total=nbatches):
+	for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(train, train_counter, train_hierarchial_actvecs, batch_size, tokenizer)), total=nbatches):
 
 		batch_size_curr = data.shape[1]
-		# optimizer.zero_grad() 			
+		# optimizer.zero_grad()
 
 		output = model(data, targets, act_vecs)
 
@@ -100,13 +102,13 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 		logger.debug('Beam size {}'.format(beam_size))
 	model.eval()
 	total_loss =0
-	ntokens = len(wordtoidx)
+	ntokens = len(tokenizer.get_vocab())
 	score=0
 	start = time.time()
 	nbatches = len(dataset)//batch_size
 
 	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs, batch_size, wordtoidx)), total=len(dataset)//batch_size):
+		for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs, batch_size, tokenizer)), total=len(dataset)//batch_size):
 
 			batch_size_curr = targets.shape[1]
 			# assert(data.shape[1]==act_vecs.shape[1])
@@ -157,16 +159,16 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 
 	#	logger.debug('BLEU Scores for different buckets: ')
 	#	logger.debug('Small: {} \tMedium: {}\tLarge: {}'.format(score_small, score_medium, score_large))
-
+	
 		indices = list(range(0, len(dataset)))
 		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
 
-		pred_hyp = tensor_to_sents(hyp , wordtoidx)  # hyp[indices]
+		pred_hyp = tensor_to_sents(hyp , tokenizer)  # hyp[indices]
 		pred_ref = split_to_responses(split)
 		# pred_ref = split_to_responses(split)[:args.batch_size] # uncomment for 1 batch
 		
-		score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
-		f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
+		score = BLEU_calc.score(pred_hyp, pred_ref, tokenizer)*100
+		f1_entity = F1_calc.score(pred_hyp, pred_ref, tokenizer)*100
 		total_loss = total_loss/len(dataset)
 
 		all_dialog_files = split_to_files(split)
@@ -211,12 +213,12 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 	model.eval()
 	total_loss =0
 	start_time = time.time()
-	ntokens = len(idxtoword)
+	ntokens = len(tokenizer.get_vocab())
 	
 	dataset, dataset_counter, dataset_act_vecs = name_to_dataset(split)	
 	
 	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs,  batch_size, wordtoidx)):
+		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs,  batch_size, tokenizer)):
 
 			batch_size_curr = data.shape[1]
 			output = model(data, targets,  act_vecs)
@@ -263,8 +265,8 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 			save_model(model, args, 'checkpoint_bestloss.pt',train_loss,val_loss_ground, -1)
 
 		# if epoch < 15:
-		# 	save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
-		# 	continue
+		#	 save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
+		#	 continue
 
 		# for every "val_epoch_freq" epochs, evaluate the metrics
 		if epoch%val_epoch_freq!=0:
@@ -409,12 +411,12 @@ test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses 
 
 max_sent_len = 50
 
-idxtoword, wordtoidx = build_vocab_freqbased(load=False)
-vocab_size = len(idxtoword)
+tokenizer = build_vocab_freqbased()
+vocab_size = len(tokenizer.get_vocab())
 
 print('length of vocab: ', vocab_size)
 
-ntokens=len(wordtoidx)
+ntokens=len(tokenizer.get_vocab())
 
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
@@ -461,7 +463,7 @@ def run(args, optuna_callback=None):
 	
 	max_sent_len = 50
 
-	ntokens=len(wordtoidx)
+	ntokens=len(tokenizer.get_vocab())
 
 
 	model = Transformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
@@ -488,7 +490,7 @@ def run(args, optuna_callback=None):
 	logger.debug('\n\n\n=====>\n')
 
 	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
-	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	# logger.debug('Testing model\n')

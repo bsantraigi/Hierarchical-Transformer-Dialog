@@ -14,12 +14,15 @@ from datetime import datetime
 from collections import Counter
 import Constants
 
+from tokenizers import ByteLevelBPETokenizer, Tokenizer
+import tempfile
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # print(device)
 
 
 def tokenize_en(sentence):
-#     return [tok.text for tok in en.tokenizer(sentence)]
+#	 return [tok.text for tok in en.tokenizer(sentence)]
 	return sentence.split()
 
 
@@ -52,7 +55,7 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 				for w in turn['act']:
 					d, f, s = w.split('-')
 					hierarchical_act_vecs[Constants.domains.index(d)] = 1
-					hierarchical_act_vecs[len(Constants.domains) + Constants.functions.index(f)] = 1         
+					hierarchical_act_vecs[len(Constants.domains) + Constants.functions.index(f)] = 1		 
 					hierarchical_act_vecs[len(Constants.domains) + len(Constants.functions) + Constants.arguments.index(s)] = 1
 
 			context = src
@@ -63,10 +66,10 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 			src.append(sys)
 			
 
-	# data = data[:500] # COMMENT THIS IN FINAL RUN
 	print('Length of', split_name,' dataset is', len(data))
 
-	data.sort(key=lambda x:x[0])
+	data.sort(key=lambda x:x[0], reverse=True) # first use the longer dialogs to reserve the GPU
+	# data = data[:20] # COMMENT THIS IN FINAL RUN
 	c=Counter()
 	c.update([len(x[1])+len(x[2]) for x in data])
 	# print(c)
@@ -118,7 +121,7 @@ def build_vocab(train, load):
 		with open('data/wordtoidx.pkl', 'wb') as file:
 			pkl.dump(wordtoidx, file)
 	else:
-		# loading    
+		# loading	
 		idxtoword = pkl.load(open('data/idxtoword.pkl', 'rb'))
 		wordtoidx = pkl.load(open('data/wordtoidx.pkl', 'rb'))
 
@@ -126,14 +129,24 @@ def build_vocab(train, load):
 
 	return idxtoword, wordtoidx
 
-def build_vocab_freqbased(load): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
+from tokenizers import ByteLevelBPETokenizer
+import json
+import tempfile
+
+def build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", recreate=False): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
+	if not recreate:
+		if os.path.exists(V_PATH):
+			print("Vocab Exists: ", V_PATH)
+			# tokenizer = ByteLevelBPETokenizer()
+			tokenizer = Tokenizer.from_file(V_PATH)
+			return tokenizer
+		
 	split_name = 'train'
 	file_path = 'hdsa_data/hdsa_data/'
 	data_dir = 'data'
 	dataset_file = open(file_path+split_name+'.json', 'r')
 	dataset = json.load(dataset_file)
 
-	c = Counter()
 	idxtoword = {}
 	wordtoidx ={}
 	idxtoword[0]='PAD'
@@ -141,30 +154,41 @@ def build_vocab_freqbased(load): # [ no of turns , src, tgt, act_vecs, hierarchi
 	idxtoword[2] = 'SOS'
 	idxtoword[3]='EOS'
 	i = 4
+	
+	lines = []
 	for x in dataset:
 		dialog_file = x['file']
 		src = []
 		for turn_num, turn in enumerate(x['info']):
-			user= turn['user'].lower().strip().split()
-			sys = turn['sys'].lower().strip().split()
-			c.update(user)
-			c.update(sys)
+			user= turn['user'].lower().strip()
+			sys = turn['sys'].lower().strip()
+			lines.append(user)
+			lines.append(sys)
 
-	#     print(c)
-	# adding only slot_act in train
-	for k,v in c.items():
-		if k[0]=='[' and k[-1]==']' and '[' not in k[1:]:
-			idxtoword[i]=k
-			i += 1
-	for idx, (k,v) in enumerate(c.most_common(1500)):
-		if k not in idxtoword.values():
-			idxtoword[i] = k
-			i += 1
-	wordtoidx = {v:k for k,v in idxtoword.items()}
-	return idxtoword, wordtoidx
+	print(f"{len(lines)} lines in data.")
+	# write to tmp
+	fp = tempfile.NamedTemporaryFile("w", delete=False)
+	for l in lines:
+		fp.write(l+"\n")
+	fp.close()
+	print(fp.name)
+	
+	# build tokenizer
+	tokenizer = ByteLevelBPETokenizer()
+	tokenizer.train([fp.name], 
+					vocab_size=30000 , 
+					special_tokens=["PAD", "SOS", "EOS", "UNK"]
+				   )
+	tokenizer.save(V_PATH)
+	
+	# delete tmp file
+	os.system(f"rm {fp.name}")
+	return tokenizer
 
 
-
+# tokenizer = build_vocab_freqbased()
+# vocab_size = len(tokenizer.get_vocab())
+# print(vocab_size)
 
 
 
