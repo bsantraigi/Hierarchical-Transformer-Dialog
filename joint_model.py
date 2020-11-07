@@ -70,7 +70,10 @@ class Joint_model(nn.Module):
 		self.da_decoder = TransformerDecoder(da_decoder_layers, nlayers_d)
 		
 		self.encoder = nn.Embedding(ntoken, ninp)
-		self.decoder = nn.Linear(ninp, ntoken)
+		self.linear_bs = nn.Linear(ninp, ntoken)
+		self.linear_act = nn.Linear(ninp, ntoken)
+		self.linear_tgt = nn.Linear(ninp, ntoken)
+
 		self.pos_encoder = PositionalEncoding(ninp, dropout)
 		
 		self.ninp = ninp
@@ -89,8 +92,11 @@ class Joint_model(nn.Module):
 	def init_weights(self):
 		initrange = 0.1
 		self.encoder.weight.data.uniform_(-initrange, initrange)
-		self.decoder.bias.data.zero_()
-		self.decoder.weight.data.uniform_(-initrange, initrange)
+		# self.decoder.bias.data.zero_()
+		self.linear_bs.bias.data.zero_()
+		self.linear_act.bias.data.zero_()
+		self.linear_tgt.bias.data.zero_()
+		# self.decoder.weight.data.uniform_(-initrange, initrange)
 
 	def compute_encoder_output(self, src):
 		max_sent_len = 50
@@ -138,7 +144,7 @@ class Joint_model(nn.Module):
 		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*max_triplets, bs, embed
 		belief = self.pos_encoder(belief)
 		belief_logits = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask) # length=50/n, bs, embed
-		pred_belief = self.decoder(belief_logits)
+		pred_belief = self.linear_bs(belief_logits)
 
 		# Dialog Act decoder
 		da_mask = _gen_mask_sent(da.shape[0])
@@ -146,14 +152,14 @@ class Joint_model(nn.Module):
 		da = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
 		da = self.pos_encoder(da)
 		da_logits = self.da_decoder(da, torch.cat([belief_logits, memory]) , tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)
-		pred_da = self.decoder(da_logits)
+		pred_da = self.linear_act(da_logits)
 
 		# Response decoder - 
 		# tgt shape - (msl, batch_size, embed)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
 		tgt = self.pos_encoder(tgt)
 		output = self.response_decoder(tgt, torch.cat([da_logits, memory]), tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
-		output = self.decoder(output)
+		output = self.linear_tgt(output)
 		return output, pred_belief, pred_da
 
 	def decode_belief_state(self, belief, memory): # pass curr_belief - length, bs
@@ -164,7 +170,7 @@ class Joint_model(nn.Module):
 		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*triplets, bs, embed
 		belief = self.pos_encoder(belief)
 		pred_belief = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask)[-1].unsqueeze(0) # length, bs,embed -> 1, bs, embed
-		pred_belief = self.decoder(pred_belief)
+		pred_belief = self.linear_bs(pred_belief)
 		pred = torch.max(pred_belief, dim=2)[1] # 1, 32
 		return pred, pred_belief
 
@@ -175,7 +181,7 @@ class Joint_model(nn.Module):
 		da = self.encoder(da)*math.sqrt(self.ninp) # length , bs, embed
 		da = self.pos_encoder(da)
 		pred_da = self.da_decoder(da, torch.cat([belief, memory]), tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)[-1].unsqueeze(0) # 1, bs, embed
-		pred_da = self.decoder(pred_da) # 1, bs, V
+		pred_da = self.linear_act(pred_da) # 1, bs, V
 		pred = torch.max(pred_da, dim=2)[1] # 1, 32
 		return pred, pred_da
 
@@ -186,7 +192,7 @@ class Joint_model(nn.Module):
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
 		tgt = self.pos_encoder(tgt)
 		output = self.response_decoder(tgt, torch.cat([da, memory]), tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)[-1,:,:].unsqueeze(0)
-		output = self.decoder(output)
+		output = self.linear_tgt(output)
 		output_max = torch.max(output, dim=2)[1]
 		return output, output_max
 
