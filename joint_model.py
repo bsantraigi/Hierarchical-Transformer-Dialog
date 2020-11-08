@@ -151,14 +151,14 @@ class Joint_model(nn.Module):
 		da_pad_mask = (da==0).transpose(0,1)
 		da = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
 		da = self.pos_encoder(da)
-		da_logits = self.da_decoder(da, torch.cat([belief_logits, memory]) , tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)
+		da_logits = self.da_decoder(da, torch.cat([belief, memory]) , tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)
 		pred_da = self.linear_act(da_logits)
 
 		# Response decoder - 
 		# tgt shape - (msl, batch_size, embed)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
 		tgt = self.pos_encoder(tgt)
-		output = self.response_decoder(tgt, torch.cat([da_logits, memory]), tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
+		output = self.response_decoder(tgt, torch.cat([da, memory]), tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
 		output = self.linear_tgt(output)
 		return output, pred_belief, pred_da
 
