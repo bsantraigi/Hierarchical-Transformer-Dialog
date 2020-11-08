@@ -424,8 +424,8 @@ class Transformer_acts(nn.Module):
 	def greedy_search(self, src, act_vecs, batch_size):
 		max_sent_len = 50
 		max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
-		tgt = 2*torch.ones(1, batch_size , device=device).long()
-		eos_tokens = 3*torch.ones(1, batch_size, device=device).long()
+		tgt = Constants.SOS*torch.ones(1, batch_size , device=device).long()
+		eos_tokens = Constants.EOS*torch.ones(1, batch_size, device=device).long()
 
 		for i in range(1, max_sent_len+1): # predict 48 words + sos+eos=50
 			output = self.forward(src, tgt, act_vecs)[-1,:,:].unsqueeze(0)

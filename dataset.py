@@ -134,55 +134,51 @@ import json
 import tempfile
 
 def build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", recreate=False): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
-	if not recreate:
-		if os.path.exists(V_PATH):
-			print("Vocab Exists: ", V_PATH)
-			# tokenizer = ByteLevelBPETokenizer()
-			tokenizer = Tokenizer.from_file(V_PATH)
-			return tokenizer
-		
-	split_name = 'train'
-	file_path = 'hdsa_data/hdsa_data/'
-	data_dir = 'data'
-	dataset_file = open(file_path+split_name+'.json', 'r')
-	dataset = json.load(dataset_file)
+	if os.path.exists(V_PATH) and (not recreate):
+		print("Vocab Exists: ", V_PATH)
+		# tokenizer = ByteLevelBPETokenizer()
+		tokenizer = Tokenizer.from_file(V_PATH)
+	else:
+		split_name = 'train'
+		file_path = 'hdsa_data/hdsa_data/'
+		data_dir = 'data'
+		dataset_file = open(file_path+split_name+'.json', 'r')
+		dataset = json.load(dataset_file)
 
-	idxtoword = {}
-	wordtoidx ={}
-	idxtoword[0]='PAD'
-	idxtoword[1]='UNK'
-	idxtoword[2] = 'SOS'
-	idxtoword[3]='EOS'
-	i = 4
-	
-	lines = []
-	for x in dataset:
-		dialog_file = x['file']
-		src = []
-		for turn_num, turn in enumerate(x['info']):
-			user= turn['user'].lower().strip()
-			sys = turn['sys'].lower().strip()
-			lines.append(user)
-			lines.append(sys)
+		lines = []
+		for x in dataset:
+			dialog_file = x['file']
+			src = []
+			for turn_num, turn in enumerate(x['info']):
+				user= turn['user'].lower().strip()
+				sys = turn['sys'].lower().strip()
+				lines.append(user)
+				lines.append(sys)
 
-	print(f"{len(lines)} lines in data.")
-	# write to tmp
-	fp = tempfile.NamedTemporaryFile("w", delete=False)
-	for l in lines:
-		fp.write(l+"\n")
-	fp.close()
-	print(fp.name)
+		print(f"{len(lines)} lines in data.")
+		# write to tmp
+		fp = tempfile.NamedTemporaryFile("w", delete=False)
+		for l in lines:
+			fp.write(l+"\n")
+		fp.close()
+		print(fp.name)
+
+		# build tokenizer
+		tokenizer = ByteLevelBPETokenizer()
+		tokenizer.train([fp.name], 
+						vocab_size=30000 , 
+						special_tokens=["PAD", "SOS", "EOS", "UNK"]
+					   )
+		tokenizer.save(V_PATH)
+
+		# delete tmp file
+		os.system(f"rm {fp.name}")
 	
-	# build tokenizer
-	tokenizer = ByteLevelBPETokenizer()
-	tokenizer.train([fp.name], 
-					vocab_size=30000 , 
-					special_tokens=["PAD", "SOS", "EOS", "UNK"]
-				   )
-	tokenizer.save(V_PATH)
+	Constants.PAD = tokenizer.get_vocab()["PAD"]
+	Constants.SOS = tokenizer.get_vocab()["SOS"]
+	Constants.EOS = tokenizer.get_vocab()["EOS"]
+	Constants.UNK = tokenizer.get_vocab()["UNK"]
 	
-	# delete tmp file
-	os.system(f"rm {fp.name}")
 	return tokenizer
 
 

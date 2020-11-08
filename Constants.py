@@ -1,9 +1,9 @@
 import json, numpy
 
-PAD = 0
-UNK=1
-SOS=2
-EOS=3
+# PAD=0
+# SOS=1
+# EOS=2
+# UNK=3
 
 max_sent_len = 50
 
