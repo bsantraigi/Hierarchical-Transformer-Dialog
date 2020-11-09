@@ -21,6 +21,7 @@ from dataset import *
 from utils import *
 from model import *
 from joint_model import *
+from joint_model_v2 import *
 from metrics import *
 from collections import OrderedDict
 from evaluate import evaluateModel
@@ -517,6 +518,8 @@ def run(args, optuna_callback=None):
 		log_path ='running/action_pred/'
 	elif args.model_type=="joint":
 		log_path ='running/joint_simple/'
+	elif args.model_type=="joint_v2":
+		log_path ='running/joint_v2/'
 	else:
 		print('Invalid model type')
 		raise ValueError
@@ -553,8 +556,11 @@ def run(args, optuna_callback=None):
 	if args.model_type=="action_pred":
 		model = Action_predictor(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.dropout)
 		criterion = nn.BCELoss()
-	else:
+	elif args.model_type=="joint":
 		model = Joint_model(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
+		criterion = nn.CrossEntropyLoss(ignore_index=0)
+	elif args.model_type=="joint_v2":
+		model = Joint_model_v2(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
 		criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 	seed = 123
@@ -613,9 +619,9 @@ if __name__ == '__main__':
 
 	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
-	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
+	parser.add_argument("-e", "--epochs", default=1, type=int, help = "Give number of epochs")
 
-	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [joint, action_pred]")
+	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [joint, joint_v2, action_pred]")
 
 	args = parser.parse_args()
 	run(args)
