@@ -166,10 +166,11 @@ def build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", recreate=Fals
 		# build tokenizer
 		tokenizer = ByteLevelBPETokenizer()
 		tokenizer.train([fp.name], 
-						vocab_size=30000 , 
-						special_tokens=["PAD", "SOS", "EOS", "UNK"]
+						vocab_size=10_000 , 
+						special_tokens=["PAD", "UNK", "SOS", "EOS"]
 					   )
 		tokenizer.save(V_PATH)
+		print("Vocab Created: ", V_PATH)
 
 		# delete tmp file
 		os.system(f"rm {fp.name}")
