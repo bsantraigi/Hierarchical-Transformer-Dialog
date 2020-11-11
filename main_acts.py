@@ -427,9 +427,9 @@ def run(args, optuna_callback=None):
 	global logger 
 
 	if args.model_type=="SET++":
-		log_path ='running/transformer_set++/'
+		log_path ='running/bpe_set++/'
 	elif args.model_type=="HIER++":
-		log_path ='running/transformer_hier++/'
+		log_path ='running/bpe_hier++/'
 	else:
 		print('Invalid model type')
 		raise ValueError
@@ -500,7 +500,7 @@ def run(args, optuna_callback=None):
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)
-	test_split('test', model, args, criterion)
+	# test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	return val_bleu+0.5*(val_matches+val_successes)
