@@ -58,7 +58,7 @@ def define_args(main_args, trial):
         'nlayers_e1': trial.suggest_int("nlayers_e1", 2, 6),
         'nlayers_e2': trial.suggest_int("nlayers_e2", 2, 6),
         'nlayers_d': trial.suggest_int("nlayers_d", 2, 6),
-        'dropout': trial.suggest_float("dropout", 0.1, 0.8),
+        'dropout': trial.suggest_float("dropout", 0.05, 0.8),
         'batch_size': main_args.batch_size,
         'epochs': main_args.epochs,
         'model_type': main_args.model_type
@@ -106,7 +106,7 @@ if __name__ == "__main__":
     """GLOBALS
     """
     study = optuna.create_study(study_name='hier-study', direction="maximize", storage=f'sqlite:///{args.model_type.lower()}.db', load_if_exists=True)
-    study.optimize(partial(objective, args), n_trials=15)
+    study.optimize(partial(objective, args), n_trials=30)
 
     pruned_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED]
     complete_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]

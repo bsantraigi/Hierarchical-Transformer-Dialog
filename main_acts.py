@@ -488,7 +488,7 @@ def run(args, optuna_callback=None):
 	logger.debug('\n\n\n=====>\n')
 
 	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
-	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	# logger.debug('Testing model\n')
@@ -498,7 +498,7 @@ def run(args, optuna_callback=None):
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)
-	test_split('test', model, args, criterion)
+	# test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	return val_bleu+0.5*(val_matches+val_successes)
