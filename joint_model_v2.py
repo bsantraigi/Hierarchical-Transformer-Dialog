@@ -144,7 +144,7 @@ class Joint_model_v2(nn.Module):
 		# Belief state decoder
 		# Belief state:  #[belief start, domain slot_name, .., belief end] - msl, bs
 		bs_mask = _gen_mask_sent(belief.shape[0])
-		bs_pad_mask = (belief==0).transpose(0,1)
+		bs_pad_mask = (belief==0).transpose(0,1)#bs, msl
 		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*max_triplets, bs, embed
 		belief = self.pos_encoder(belief)
 		belief_logits = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask) # length=50/n, bs, embed
@@ -153,15 +153,17 @@ class Joint_model_v2(nn.Module):
 		# Dialog Act decoder
 		da_mask = _gen_mask_sent(da.shape[0])
 		da_pad_mask = (da==0).transpose(0,1)
-		da = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
-		da = self.pos_encoder(da) + self.linear_1(belief.mean(0)).unsqueeze(0)
+		da = self.encoder(da)*math.sqrt(self.ninp) # msl+1, bs, embed
+		belief_pool = (belief*~bs_pad_mask.transpose(0,1).unsqueeze(-1)).sum(0)/(~bs_pad_mask).sum(1).unsqueeze(1) #take mean without pad
+		da = self.pos_encoder(da) + self.linear_1(belief_pool).unsqueeze(0)
 		da_logits = self.da_decoder(da, memory, tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)
 		pred_da = self.linear_act(da_logits)
 
 		# Response decoder - 
 		# tgt shape - (msl, batch_size, embed)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
-		tgt = self.pos_encoder(tgt) + self.linear_2(da.mean(0)).unsqueeze(0)
+		da_pool = (da*~da_pad_mask.transpose(0,1).unsqueeze(-1)).sum(0)/(~da_pad_mask).sum(1).unsqueeze(1)
+		tgt = self.pos_encoder(tgt) + self.linear_2(da_pool).unsqueeze(0)
 		output = self.response_decoder(tgt, memory, tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
 		output = self.linear_tgt(output)
 		return output, pred_belief, pred_da
@@ -178,23 +180,27 @@ class Joint_model_v2(nn.Module):
 		pred = torch.max(pred_belief, dim=2)[1] # 1, 32
 		return pred, pred_belief
 
-	def decode_dialog_act(self, da, belief, memory):
+	def decode_dialog_act(self, da, belief, bs_pad_mask, memory):
 		length, batch_size = da.shape
 		da_mask = _gen_mask_sent(da.shape[0])
 		da_pad_mask = (da==0).transpose(0,1)
 		da = self.encoder(da)*math.sqrt(self.ninp) # length , bs, embed
-		da = self.pos_encoder(da) + self.linear_1(belief.mean(0)).unsqueeze(0)
+
+		belief_pool = (belief*~bs_pad_mask.transpose(0,1).unsqueeze(-1)).sum(0)/(~bs_pad_mask).sum(1).unsqueeze(1) #take mean without pad
+		da = self.pos_encoder(da) + self.linear_1(belief_pool).unsqueeze(0)
 		pred_da = self.da_decoder(da, memory, tgt_mask=da_mask, tgt_key_padding_mask=da_pad_mask)[-1].unsqueeze(0) # 1, bs, embed
 		pred_da = self.linear_act(pred_da) # 1, bs, V
 		pred = torch.max(pred_da, dim=2)[1] # 1, 32
 		return pred, pred_da
 
-	def decode_response(self, memory, belief, da, tgt):
+	def decode_response(self, memory, belief, da, da_pad_mask, tgt):
 		# tgt shape - (msl, batch_size, embed)
 		tgt_mask = _gen_mask_sent(tgt.shape[0])		
 		tgt_pad_mask = (tgt==0).transpose(0,1)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
-		tgt = self.pos_encoder(tgt) +  self.linear_2(da.mean(0)).unsqueeze(0)
+
+		da_pool = (da*~da_pad_mask.transpose(0,1).unsqueeze(-1)).sum(0)/(~da_pad_mask).sum(1).unsqueeze(1)
+		tgt = self.pos_encoder(tgt) +  self.linear_2(da_pool).unsqueeze(0)
 		output = self.response_decoder(tgt, memory, tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)[-1,:,:].unsqueeze(0)
 		output = self.linear_tgt(output)
 		output_max = torch.max(output, dim=2)[1]
@@ -235,7 +241,7 @@ class Joint_model_v2(nn.Module):
 
 		# Generate dialog act
 		for i in range(0, max_sent_len): # predict 50 words
-			cur_da, cur_logits = self.decode_dialog_act(da, belief_memory, memory)
+			cur_da, cur_logits = self.decode_dialog_act(da, belief_memory, bs_pad_mask, memory)
 			if i==0:
 				da_logits = cur_logits
 			else:
@@ -253,7 +259,7 @@ class Joint_model_v2(nn.Module):
 
 		# Generate response
 		for i in range(1, max_sent_len+1): # predict 48 words + sos+eos=50
-			output, output_max = self.decode_response(memory, belief_memory, da_memory, tgt)
+			output, output_max = self.decode_response(memory, belief_memory, da_memory, da_pad_mask, tgt)
 			if i==1:
 				logits = output
 			else:
