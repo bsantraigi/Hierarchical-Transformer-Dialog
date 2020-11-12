@@ -22,6 +22,7 @@ from utils import *
 from model import *
 from joint_model import *
 from joint_model_v2 import *
+from joint_model_v3 import *
 from metrics import *
 from collections import OrderedDict
 from evaluate import evaluateModel
@@ -520,6 +521,8 @@ def run(args, optuna_callback=None):
 		log_path ='running/joint_simple/'
 	elif args.model_type=="joint_v2":
 		log_path ='running/joint_v2/'
+	elif args.model_type=="joint_v3":
+		log_path ='running/joint_v3/'
 	else:
 		print('Invalid model type')
 		raise ValueError
@@ -561,6 +564,9 @@ def run(args, optuna_callback=None):
 		criterion = nn.CrossEntropyLoss(ignore_index=0)
 	elif args.model_type=="joint_v2":
 		model = Joint_model_v2(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
+		criterion = nn.CrossEntropyLoss(ignore_index=0)
+	elif args.model_type=="joint_v3":
+		model = Joint_model_v3(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
 		criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 	seed = 123
@@ -621,7 +627,7 @@ if __name__ == '__main__':
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
 	parser.add_argument("-e", "--epochs", default=1, type=int, help = "Give number of epochs")
 
-	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [joint, joint_v2, action_pred]")
+	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [joint, joint_v2, joint_v3, action_pred]")
 
 	args = parser.parse_args()
 	run(args)
