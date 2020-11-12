@@ -9,6 +9,7 @@
 #SBATCH --mem=23000        # Memory per node specification is in MB. It is optional. 
 #SBATCH --mail-user=bsantraigi@gmail.com        # user's email ID where job status info will be sent
 #SBATCH --mail-type=ALL        # Send Mail for all type of event regarding the job
+#SBATCH -w gpu012
 pwd; hostname; date
 
 module load compiler/intel-mpi/mpi-2019-v5
@@ -19,7 +20,7 @@ module load compiler/cuda/10.1
 export CUDA_VISIBLE_DEVICES=0,1
 mpirun -bootstrap slurm which python
 mpirun -bootstrap slurm nvcc --version
-mpirun -bootstrap slurm python main_acts.py -embed 196 -heads 7 -hid 98 -l_e1 2 -l_e2 4 -l_d 6 -d 0.001 -bs 8 -e 30 -model HIER++
+mpirun -bootstrap slurm python main_acts.py -embed 196 -heads 7 -hid 196 -l_e1 3 -l_e2 2 -l_d 3 -d 0.142 -bs 8 -e 30 -model HIER++
 # mpirun -bootstrap slurm python main_acts.py -embed 175 -heads 7 -hid 91 -l_e1 4 -l_e2 6 -l_d 3 -d 0.071 -bs 8 -e 30 -model SET++
 
 # HIER++

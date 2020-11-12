@@ -68,7 +68,7 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 
 	print('Length of', split_name,' dataset is', len(data))
 
-	data.sort(key=lambda x:x[0], reverse=True) # first use the longer dialogs to reserve the GPU
+	data.sort(key=lambda x:x[0]) #, reverse=True) # first use the longer dialogs to reserve the GPU
 	# data = data[:20] # COMMENT THIS IN FINAL RUN
 	c=Counter()
 	c.update([len(x[1])+len(x[2]) for x in data])
