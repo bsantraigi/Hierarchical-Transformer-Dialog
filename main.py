@@ -625,7 +625,7 @@ if __name__ == '__main__':
 
 	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
-	parser.add_argument("-e", "--epochs", default=1, type=int, help = "Give number of epochs")
+	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
 
 	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [joint, joint_v2, joint_v3, action_pred]")
 

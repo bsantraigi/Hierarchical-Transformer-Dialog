@@ -130,7 +130,7 @@ class Joint_model_v3(nn.Module):
 		# encoder 2
 		memory_inter = self.pos_encoder(memory_e1)
 		memory = self.transformer_encoder_sent(memory_inter, src_mask_sent, src_pad_mask_sent)
-		return memory, memory_e1
+		return memory #return memory_e1 upon need
 	
 	def forward(self, src, belief, da, tgt): 
 	# belief - 50,bs | da - 51, bs | tgt - 50,bs
@@ -140,7 +140,7 @@ class Joint_model_v3(nn.Module):
 		tgt_mask = _gen_mask_sent(tgt.shape[0])		
 		tgt_pad_mask = (tgt==0).transpose(0,1)
 
-		memory, memory_e1 = self.compute_encoder_output(src)
+		memory = self.compute_encoder_output(src)
 
 		# Belief state decoder
 		# Belief state:  #[belief start, domain slot_name, .., belief end] - msl, bs
