@@ -1,3 +1,14 @@
+# HIER Project
+
+## Error Analysis Steps
+
+1. First run `main_acts.py` or `main.py` with test_split uncommented (inside run function). This will save the prediction json files in `running` folder.
+2. Then run `new_eval/new_eval.ipynb` to obtain the stats file with inform and success rates.
+3. Finally, the error analysis is done in `error_reader.ipynb` notebook.
+
+```
+main_acts.py (eval only) -> new_eval -> error_reader.ipynb
+```
 
 ### DATASET: (From https://github.com/wenhuchen/HDSA-Dialog)
 
