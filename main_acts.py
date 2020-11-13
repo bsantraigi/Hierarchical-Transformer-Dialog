@@ -451,13 +451,16 @@ F1_calc = F1Scorer()
 def run(args, optuna_callback=None):
 	global logger 
 
+	nd = 'non_delex_' if args.non_delex else ''
 	if args.model_type=="SET++":
-		log_path ='running/bpe_set++/'
+		log_path = f'running/{nd}bpe_set++/'
 	elif args.model_type=="HIER++":
-		log_path ='running/bpe_hier++/'
+		log_path = f'running/{nd}bpe_hier++/'
 	else:
 		print('Invalid model type')
 		raise ValueError
+		
+	print("Log path:", log_path)
 
 	if not os.path.isdir(log_path[:-1]):
 		os.makedirs(log_path[:-1])
