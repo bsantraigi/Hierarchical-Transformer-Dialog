@@ -26,7 +26,7 @@ def tokenize_en(sentence):
 	return sentence.split()
 
 
-def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
+def gen_dataset_with_acts(split_name, non_delex=False): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
 	file_path = 'hdsa_data/hdsa_data/'
 	data_dir = 'data'
 	dataset_file = open(file_path+split_name+'.json', 'r')
@@ -43,9 +43,12 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 		src = []
 		
 		for turn_num, turn in enumerate(x['info']):
-
-			user= 'SOS '+' '.join(turn['user'].lower().strip().split()[:max_sent_len])+' EOS' 
-			sys = 'SOS '+' '.join(turn['sys'].lower().strip().split()[:max_sent_len])+' EOS'
+			# NON-DELEX
+			_SYS = 'sys_orig' if non_delex else 'sys'
+			_USR = 'user_orig' if non_delex else 'user'
+			
+			user= 'SOS '+' '.join(turn[_USR].lower().strip().split()[:max_sent_len])+' EOS' 
+			sys = 'SOS '+' '.join(turn[_SYS].lower().strip().split()[:max_sent_len])+' EOS'
 
 			src.append(user)
 
@@ -55,7 +58,7 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 				for w in turn['act']:
 					d, f, s = w.split('-')
 					hierarchical_act_vecs[Constants.domains.index(d)] = 1
-					hierarchical_act_vecs[len(Constants.domains) + Constants.functions.index(f)] = 1		 
+					hierarchical_act_vecs[len(Constants.domains) + Constants.functions.index(f)] = 1
 					hierarchical_act_vecs[len(Constants.domains) + len(Constants.functions) + Constants.arguments.index(s)] = 1
 
 			context = src
@@ -133,7 +136,7 @@ from tokenizers import ByteLevelBPETokenizer
 import json
 import tempfile
 
-def build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", recreate=False): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
+def build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", non_delex=False, recreate=False, vocab_size=2_000): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
 	if os.path.exists(V_PATH) and (not recreate):
 		print("Vocab Exists: ", V_PATH)
 		# tokenizer = ByteLevelBPETokenizer()
@@ -142,6 +145,11 @@ def build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", recreate=Fals
 		split_name = 'train'
 		file_path = 'hdsa_data/hdsa_data/'
 		data_dir = 'data'
+		
+		# NON-DELEX
+		_SYS = 'sys_orig' if non_delex else 'sys'
+		_USR = 'user_orig' if non_delex else 'user'
+		
 		dataset_file = open(file_path+split_name+'.json', 'r')
 		dataset = json.load(dataset_file)
 
@@ -150,10 +158,15 @@ def build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", recreate=Fals
 			dialog_file = x['file']
 			src = []
 			for turn_num, turn in enumerate(x['info']):
-				user= turn['user'].lower().strip()
-				sys = turn['sys'].lower().strip()
+				user= turn[_USR].lower().strip()
+				sys = turn[_SYS].lower().strip()
 				lines.append(user)
 				lines.append(sys)
+				
+				# Explicitly add the target system responses
+				if non_delex:
+					sys_delex = turn["sys"].lower().strip()
+					lines.append(sys_delex)
 
 		print(f"{len(lines)} lines in data.")
 		# write to tmp
@@ -166,7 +179,7 @@ def build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", recreate=Fals
 		# build tokenizer
 		tokenizer = ByteLevelBPETokenizer()
 		tokenizer.train([fp.name], 
-						vocab_size=2_000 , 
+						vocab_size=vocab_size,
 						special_tokens=["PAD", "UNK", "SOS", "EOS"]
 					   )
 		tokenizer.save(V_PATH)

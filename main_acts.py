@@ -399,19 +399,44 @@ def test_split(split, model, args, criterion):
 	
 
 
+# Argument Parser
+parser = argparse.ArgumentParser() 
+
+parser.add_argument("-embed", "--embedding_size", default=100, type=int, help = "Give embedding size")
+parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads")
+parser.add_argument("-hid", "--nhid", default=100, type=int,  help = "Give hidden size")
+
+parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1")
+parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2")
+parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
+
+parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
+parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
+parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
+parser.add_argument("-nd", "--non_delex", action="store_true", help = "Use non-delexicalized context inputs")
+
+parser.add_argument("-model", "--model_type", default="SET++", help="Give model name one of [SET++, HIER++]")
+
+args = parser.parse_args()
+
 # global logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
 
-train,train_counter,train_hierarchial_actvecs,train_dialog_files, train_responses = gen_dataset_with_acts('train')
-val, val_counter, val_hierarchial_actvecs, val_dialog_files, val_responses = gen_dataset_with_acts('val')
-test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses =gen_dataset_with_acts('test')
+train,train_counter,train_hierarchial_actvecs,train_dialog_files, train_responses = gen_dataset_with_acts('train', non_delex=args.non_delex)
+val, val_counter, val_hierarchial_actvecs, val_dialog_files, val_responses = gen_dataset_with_acts('val', non_delex=args.non_delex)
+test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses =gen_dataset_with_acts('test', non_delex=args.non_delex)
 
 
 max_sent_len = 50
 
-tokenizer = build_vocab_freqbased()
+if args.non_delex:
+	print("Mode: Non-Delex")
+	tokenizer = build_vocab_freqbased(V_PATH="./data/mwoz-bpe-non_delex.tokenizer.json", non_delex=args.non_delex, vocab_size=2_000)
+else:
+	print("Mode: Delex")
+	tokenizer = build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", non_delex=args.non_delex, vocab_size=2_000)
 vocab_size = len(tokenizer.get_vocab())
 
 print('length of vocab: ', vocab_size)
@@ -493,10 +518,10 @@ def run(args, optuna_callback=None):
 	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
-	# logger.debug('Testing model\n')
-	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	# logger.debug('==>Test \tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}'.format(test_bleu, test_f1, test_matches, test_successes))
-	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+	logger.debug('Testing model\n')
+	_,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	logger.debug('==>Test \tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}'.format(test_bleu, test_f1, test_matches, test_successes))
+	logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)
@@ -507,22 +532,5 @@ def run(args, optuna_callback=None):
 
 
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser() 
-
-	parser.add_argument("-embed", "--embedding_size", default=100, type=int, help = "Give embedding size")
-	parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads")
-	parser.add_argument("-hid", "--nhid", default=100, type=int,  help = "Give hidden size")
-
-	parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1")
-	parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2")
-	parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
-
-	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
-	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
-	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
-
-	parser.add_argument("-model", "--model_type", default="SET++", help="Give model name one of [SET++, HIER++]")
-
-	args = parser.parse_args()
 	run(args)
 
