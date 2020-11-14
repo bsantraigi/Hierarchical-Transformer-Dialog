@@ -29,7 +29,15 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 	dataset_file = open(file_path+split_name+'.json', 'r')
 	dataset = json.load(dataset_file)
 	
-			
+	if split_name == 'train':
+		predicted_acts = None
+	elif split_name == 'val': 
+		with open('{}/BERT_dev_prediction.json'.format(data_dir)) as f:
+			predicted_acts = json.load(f)
+	else:
+		with open('{}/BERT_test_prediction.json'.format(data_dir)) as f:
+			predicted_acts = json.load(f)
+
 	data = []
 	max_sent_len = 48
 	responses = []
@@ -46,14 +54,16 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 
 			src.append(user)
 
-			hierarchical_act_vecs = np.zeros((Constants.act_len), 'int64')
-
-			if turn['act'] != "None":
-				for w in turn['act']:
-					d, f, s = w.split('-')
-					hierarchical_act_vecs[Constants.domains.index(d)] = 1
-					hierarchical_act_vecs[len(Constants.domains) + Constants.functions.index(f)] = 1         
-					hierarchical_act_vecs[len(Constants.domains) + len(Constants.functions) + Constants.arguments.index(s)] = 1
+			if predicted_acts is not None:
+				hierarchical_act_vecs = np.asarray(predicted_acts[dialog_file][str(turn_num)], 'int64')
+			else:
+				hierarchical_act_vecs = np.zeros((Constants.act_len), 'int64')
+				if turn['act'] != "None":
+					for w in turn['act']:
+						d, f, s = w.split('-')
+						hierarchical_act_vecs[Constants.domains.index(d)] = 1
+						hierarchical_act_vecs[len(Constants.domains) + Constants.functions.index(f)] = 1
+						hierarchical_act_vecs[len(Constants.domains) + len(Constants.functions) + Constants.arguments.index(s)] = 1
 
 			context = src
 			true_response = ('SOS '+' '.join(turn['sys'].lower().strip().split())+' EOS')
@@ -80,13 +90,6 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 	# print('Loaded and save ', split_name, ' dataset')
 	
 	return all_data, c, all_hierarchial_act_vecs, all_dialog_files, true_responses
-
-
-def get_dataset_joint(split): #to do
-	data_dir = '../'
-	assert split=='train' or split=='val' or split== 'test'
-	file_name = data_dir + str(split) + '_dials.json'
-
 
 
 def build_vocab(train, load):
