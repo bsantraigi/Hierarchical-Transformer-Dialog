@@ -22,6 +22,16 @@ def _gen_mask_hierarchical(src_len, tgt_len):
     t = t.float().masked_fill(t==0, float('-inf')).masked_fill(t==1, 0)
     return t
 
+def postprocess(t): #pad after first eos - given (len, bs)
+	t = t.transpose(0,1)
+	for i, e in enumerate(t):
+		idx = (e==Constants.EOS).nonzero().flatten().tolist()
+		if len(idx)>0:
+			idx = idx[0]
+			t[i][idx+1:] = 0
+	t = t.transpose(0,1)
+	return t
+
 class PositionalEncoding(nn.Module):
 	def __init__(self, d_model, dropout, max_len= 5000):
 		super(PositionalEncoding, self).__init__()
@@ -236,6 +246,7 @@ class Joint_model_v4(nn.Module):
 		# - while computing bs loss remove SOS in belief targets with logits.
 		# belief = torch.cat([belief, belief_eos]) # should append EOS at end?
 
+		belief = postprocess(belief)#pad after first eos
 		bs_mask = _gen_mask_sent(belief.shape[0])
 		bs_pad_mask = (belief==0).transpose(0,1)
 		belief_memory = self.encoder(belief)*math.sqrt(self.ninp) # 50, bs, embed
@@ -254,6 +265,7 @@ class Joint_model_v4(nn.Module):
 		# da_logits - ([50, 32, V])
 		# da = torch.cat([da, eos_tokens])
 
+		da = postprocess(da)
 		da_mask = _gen_mask_sent(da.shape[0])
 		da_pad_mask = (da==0).transpose(0,1)
 		da_memory = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
