@@ -106,7 +106,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 	nbatches = len(dataset)//batch_size
 
 	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset,dataset_counter, dataset_act_vecs, batch_size, wordtoidx)): # , total=len(dataset)//batch_size):
+		for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs, batch_size, wordtoidx)), total=len(dataset)//batch_size):
 
 			batch_size_curr = targets.shape[1]
 			# assert(data.shape[1]==act_vecs.shape[1])
@@ -177,10 +177,18 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 			else:
 				evaluate_dials[all_dialog_files[i]]=[h]
 
+		# Save model predictions to json also for later evaluation
+		if method=='beam':
+			model_turns_file = args.log_path+'model_turns_beam_'+str(beam_size)+'_'+split+'.json'
+		elif method=='greedy':
+			model_turns_file = args.log_path+'model_turns_greedy_'+split+'.json'
+		with open(model_turns_file, 'w') as f:
+			json.dump(evaluate_dials, f)
+		
 		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
 		
 		data, _, _ = name_to_dataset(split)
-
+		
 		if method=='beam':
 			pred_file = open(args.log_path+'pred_beam_'+str(beam_size)+'_'+split+'.txt', 'w')
 		elif method=='greedy':
