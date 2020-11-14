@@ -7,8 +7,10 @@
 3. Finally, the error analysis is done in `error_reader.ipynb` notebook.
 
 ```
-main_acts.py (eval only) -> new_eval -> error_reader.ipynb
+main_acts.py (eval only) -> error_analysis -> new_eval -> error_reader.ipynb
 ```
+
+#### DO NOT TRY TO MERGE MAIN_ACTS AND ERROR_ANALYSIS. In ErrorAnalysis.ipydb, batch_size needs to be 1, so it's slow.
 
 ### DATASET: (From https://github.com/wenhuchen/HDSA-Dialog)
 
