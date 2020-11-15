@@ -165,7 +165,7 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , batch_size, criterion, split, method='beam', beam_size=None):
 	batch_size = args.batch_size
 
-	logger.debug('{} search {}'.format(method, split))
+	logger.debug('=========== {} search {} ==========='.format(method.upper(), split.upper()))
 	if method=='beam':
 		logger.debug('Beam size {}'.format(beam_size))
 	model.eval()
@@ -287,6 +287,14 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 				evaluate_dials[all_dialog_files[i]].append(h)
 			else:
 				evaluate_dials[all_dialog_files[i]]=[h]
+		
+		# Save model predictions to json also for later evaluation
+		if method=='beam':
+			model_turns_file = args.log_path+'model_turns_beam_'+str(beam_size)+'_'+split+'.json'
+		elif method=='greedy':
+			model_turns_file = args.log_path+'model_turns_greedy_'+split+'.json'
+		with open(model_turns_file, 'w') as f:
+			json.dump(evaluate_dials, f)
 
 		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
 		
@@ -340,7 +348,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 	logger.debug('At begin of training, Best val loss ground : {:0.7f} Best bleu: {:0.4f}, Best criteria: {:0.4f}'.format(best_val_loss_ground, best_val_bleu, best_criteria))
 	logger.debug('====> STARTING TRAINING NOW')
 
-	val_epoch_freq = 2
+	val_epoch_freq = 4
 	for epoch in range(1, args.epochs + 1):
 
 		epoch_start_time = time.time()
@@ -615,8 +623,9 @@ def run(args, optuna_callback=None):
 		return
 
 	# best_val_loss_ground = load_model(model, args.log_path +'checkpoint_criteria.pt')
-	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
+	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
+
 
 	logger.debug('Testing model\n')
 	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
@@ -633,9 +642,9 @@ def run(args, optuna_callback=None):
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser() 
 
-	parser.add_argument("-embed", "--embedding_size", default=100, type=int, help = "Give embedding size")
+	parser.add_argument("-embed", "--embedding_size", default=160, type=int, help = "Give embedding size")
 	parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads")
-	parser.add_argument("-hid", "--nhid", default=100, type=int,  help = "Give hidden size")
+	parser.add_argument("-hid", "--nhid", default=160, type=int,  help = "Give hidden size")
 
 	parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1")
 	parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2")
