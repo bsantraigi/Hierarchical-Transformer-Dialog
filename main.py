@@ -186,16 +186,19 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 			batch_size_curr = targets.shape[1]
 
 			if method=='beam':
-				if isinstance(model, nn.DataParallel): # TODO beam search for joint model
+				if isinstance(model, nn.DataParallel):
 					# gives list of sentences itself
-					output = model.module.translate_batch(data, act_vecs, beam_size, batch_size_curr)
+					bs_output, da_output = model.module.greedy_search_bsda(data, None, None,  batch_size_curr)
+					output = model.module.translate_batch(data, bs_output, da_output, beam_size, batch_size_curr)
 				else:
-					output = model.translate_batch(data, act_vecs, beam_size , batch_size_curr) 
+					bs_output, da_output = model.greedy_search_bsda(data, None, None, batch_size_curr)
+					output = model.translate_batch(data, bs_output, da_output, beam_size , batch_size_curr) 
+
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap]) # .module. if using dataparallel
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da, use_gt = False) # .module. if using dataparallel
 				else: # da_output_i in individal vocab indices
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap])
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da, use_gt=False)
 
 			if torch.is_tensor(output): # greedy search
 				# print(bs_logits.shape, bs.shape) - torch.Size([49, 32, 1515]) torch.Size([50, 32])
@@ -220,22 +223,20 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					hyp = output_max
 					ref = targets.transpose(0,1)
 
-					bs_pred = bs_output.transpose(0,1) # bs, 50 - with sos
-					bs_act = bs.transpose(0,1) #bs,50
+					# bs_pred = bs_output.transpose(0,1) # bs, 50 - with sos
+					# bs_act = bs.transpose(0,1) #bs,50
 
-					da_pred = da_output.transpose(0,1) # bs, 51
-					da_act = da.transpose(0,1)
+					# da_pred = da_output.transpose(0,1) # bs, 51
+					# da_act = da.transpose(0,1)
 				else:
 					hyp = torch.cat((hyp, output_max), dim=0)
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
-					bs_pred= torch.cat([bs_pred, bs_output.transpose(0,1)])
-					bs_act = torch.cat([bs_act, bs.transpose(0,1)])
+					# bs_pred= torch.cat([bs_pred, bs_output.transpose(0,1)])
+					# bs_act = torch.cat([bs_act, bs.transpose(0,1)])
 
-					da_pred=torch.cat([da_pred, da_output.transpose(0,1)])# bs, 51
-					da_act=torch.cat([da_act, da.transpose(0,1)])
-
-
+					# da_pred=torch.cat([da_pred, da_output.transpose(0,1)])# bs, 51
+					# da_act=torch.cat([da_act, da.transpose(0,1)])
 			else: # beam search
 				if i==0:
 					hyp = [torch.tensor(l) for l in output]
@@ -243,6 +244,17 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 				else:
 					hyp.extend([torch.tensor(l) for l in output])
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
+
+			if i==0:
+				bs_pred = bs_output.transpose(0,1) # bs, 50 - with sos
+				bs_act = bs.transpose(0,1) #bs,50
+				da_pred = da_output.transpose(0,1) # bs, 51
+				da_act = da.transpose(0,1)
+			else:
+				bs_pred= torch.cat([bs_pred, bs_output.transpose(0,1)])
+				bs_act = torch.cat([bs_act, bs.transpose(0,1)])
+				da_pred=torch.cat([da_pred, da_output.transpose(0,1)])# bs, 51
+				da_act=torch.cat([da_act, da.transpose(0,1)])
 
 
 		"""
@@ -298,10 +310,9 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 			pred_file.write('\nDA Gold: '+str(da_t)+'\nDA Pred: '+str(da_p))
 			pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
 
-
-	elapsed = time.time()-start
-	
-	logger.debug('==>{}\tResp Loss: {:0.3f}\tBS Loss: {:0.3f}\tDA Loss: {:0.3f}\tTotal Loss: {:0.3f}\tTime taken: {:0.1f}s'.format(split,  total_response_loss, total_bs_loss, total_da_loss, total_loss, elapsed))
+	elapsed = time.time()-start	
+	if method=='greedy':
+		logger.debug('==>{}\tResp Loss: {:0.3f}\tBS Loss: {:0.3f}\tDA Loss: {:0.3f}\tTotal Loss: {:0.3f}\tTime taken: {:0.1f}s'.format(split,  total_response_loss, total_bs_loss, total_da_loss, total_loss, elapsed))
 
 	logger.debug('==>{}\tBelief state Joint acc: {:0.2f}\tSlot acc: {:0.2f}'.format(split,  bs_joint_acc, bs_slot_acc))
 
@@ -453,13 +464,13 @@ def testing(model, args, criterion, split, method):
 def test_split(split, model, args, criterion):
 	data, dataset_counter,  dataset_bs, dataset_da = get_files_joint(split)
 	# greedy
-	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'greedy')
+	# evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'greedy')
 	# beam 2
-	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 2)
+	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 2)
 	# beam 3
-	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 3)
+	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 3)
 	# beam 5
-	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 5)
+	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 5)
 	
 
 
@@ -512,6 +523,7 @@ for w, v in Constants.V_slots_wtoi.items():
 	s_to_imap[v]=wordtoidx[w]
 for w, v in Constants.V_actions_wtoi.items():
 	a_to_imap[v]=wordtoidx[w]
+
 
 def run(args, optuna_callback=None):
 	global logger 
@@ -603,16 +615,16 @@ def run(args, optuna_callback=None):
 		return
 
 	# best_val_loss_ground = load_model(model, args.log_path +'checkpoint_criteria.pt')
-	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
+	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	logger.debug('Testing model\n')
-	_,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
 	# logger.debug('Test critiera: {:0.3f}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)
-	# test_split('test', model, args, criterion)
+	test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	return val_bleu+0.5*(val_matches+val_successes)

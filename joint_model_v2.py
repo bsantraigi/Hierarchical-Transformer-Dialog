@@ -7,6 +7,8 @@ import Constants
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # print(device)
+max_sent_len = 50
+
 
 def _gen_mask_sent(sz):
 	mask = ((torch.triu(torch.ones(sz, sz, device=device)) == 1) * 1.0).transpose(0,1)
@@ -21,6 +23,24 @@ def _gen_mask_hierarchical(src_len, tgt_len):
 		t[i:i+tgt_len, -tgt_len:] = f
 	t = t.float().masked_fill(t==0, float('-inf')).masked_fill(t==1, 0)
 	return t
+
+def collect_active_part(beamed_tensor, curr_active_inst_idx, n_prev_active_inst, n_bm):
+	''' Collect tensor parts associated to active instances. '''
+
+	_, *d_hs = beamed_tensor.size()
+	n_curr_active_inst = len(curr_active_inst_idx)
+	new_shape = (n_curr_active_inst * n_bm, *d_hs)
+
+	beamed_tensor = beamed_tensor.view(n_prev_active_inst, -1)
+	beamed_tensor = beamed_tensor.index_select(0, curr_active_inst_idx)
+	beamed_tensor = beamed_tensor.view(*new_shape)
+
+	return beamed_tensor
+
+def get_inst_idx_to_tensor_position_map(inst_idx_list):
+	''' Indicate the position of an instance in a tensor. '''
+	return {inst_idx: tensor_position for tensor_position, inst_idx in enumerate(inst_idx_list)}
+
 
 def postprocess(t): #pad after first eos - given (len, bs)
 	t = t.transpose(0,1)
@@ -217,19 +237,11 @@ class Joint_model_v2(nn.Module):
 		return output, output_max
 
 
-	def greedy_search(self, src, batch_size, imaps):
-		# Index 2 is SOS, index 3 is EOS in all vocabs
-		max_sent_len = 50
-		max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
-
-		tgt = Constants.SOS*torch.ones(1, batch_size , device=device).long()
-		eos_tokens = Constants.EOS*torch.ones(1, batch_size, device=device).long()
+	def greedy_search_bsda(self, src, _belief, _da, batch_size, return_logits=False, use_gt=False):
 		belief = Constants.SOS*torch.ones(1, batch_size , device=device).long() # 1, bs 
 		da = Constants.SOS*torch.ones(1, batch_size , device=device).long() # 1, bs
 
-
 		memory = self.compute_encoder_output(src)
-
 		# Generate belief state
 		for i in range(0, max_sent_len-1): # predict 49 words
 			cur_belief, cur_logits = self.decode_belief_state(belief, memory)
@@ -239,12 +251,13 @@ class Joint_model_v2(nn.Module):
 				belief_logits = torch.cat([belief_logits, cur_logits], dim=0)
 			belief = torch.cat([belief, cur_belief])
 
-		# belief [50, 32] -> with sos
-		# belief_logits - ([49, 32, V])
-		# - while computing bs loss remove SOS in belief targets with logits.
+		# belief [50, 32] -> with sos, belief_logits - ([49, 32, V])
 		# belief = torch.cat([belief, belief_eos]) # should append EOS at end?
 
 		belief = postprocess(belief)#pad after first eos
+		pred_belief = belief
+		if use_gt:
+			belief = _belief			
 		bs_mask = _gen_mask_sent(belief.shape[0])
 		bs_pad_mask = (belief==0).transpose(0,1)
 		belief_memory = self.encoder(belief)*math.sqrt(self.ninp) # 50, bs, embed
@@ -258,16 +271,30 @@ class Joint_model_v2(nn.Module):
 			else:
 				da_logits = torch.cat([da_logits, cur_logits], dim=0)
 			da = torch.cat([da, cur_da])
-
-		# da - [51, 32] - with sos
-		# da_logits - ([50, 32, V])
-		# da = torch.cat([da, eos_tokens])
+		# da - [51, 32] - with sos, da_logits - ([50, 32, V])
 		da = postprocess(da)
+		pred_da = da
+		if return_logits:
+			return belief_memory, memory, belief_logits, da_logits, pred_belief, pred_da
+		else:
+			return pred_belief, pred_da
+
+
+	def greedy_search(self, src, batch_size, imaps, _belief, _da, use_gt=False):
+		# Index 2 is SOS, index 3 is EOS
+		# if use_gt is True, _belief, _da(ground truth) are used for inference in later decoders
+		eos_tokens = Constants.EOS*torch.ones(1, batch_size, device=device).long()
+		tgt = Constants.SOS*torch.ones(1, batch_size , device=device).long()
+
+		belief_memory, memory, belief_logits, da_logits, pred_belief, da = self.greedy_search_bsda(src, _belief, _da, batch_size, True, use_gt)
+
+		pred_da = da
+		if use_gt:
+			da = _da
 		da_mask = _gen_mask_sent(da.shape[0])
 		da_pad_mask = (da==0).transpose(0,1)
 		da_memory = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
 		da_memory = self.pos_encoder(da_memory)
-
 		# Generate response
 		for i in range(1, max_sent_len+1): # predict 48 words + sos+eos=50
 			output, output_max = self.decode_response(memory, belief_memory, da_memory, da_pad_mask, tgt)
@@ -281,10 +308,10 @@ class Joint_model_v2(nn.Module):
 		tgt = torch.cat([tgt[:49,:], eos_tokens], dim=0)
 
 		# no sos in belief and da, belief_logits - 49, remove sos in labels while loss computation
-		return logits, tgt, belief_logits, belief, da_logits, da
+		return logits, tgt, belief_logits, pred_belief, da_logits, pred_da
 
 		
-	def translate_batch(self, src, act_vecs, n_bm, batch_size): # , src_pad_mask, tgt_pad_mask
+	def translate_batch(self, src, bs, da, n_bm, batch_size): # , src_pad_mask, tgt_pad_mask
 		# adopted from HDSA_Dialog
 		device = src.device
 
@@ -292,23 +319,23 @@ class Joint_model_v2(nn.Module):
 		max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
 
 		src = src.transpose(0,1) # src shape changed to (bs*mdl, msl)
-		act_vecs = act_vecs.transpose(0, 1) # act_vecs changed to bs,44
+		bs = bs.transpose(0, 1)
+		da = da.transpose(0,1)
 
-
-		def collate_active_info(src, act_vecs, inst_idx_to_position_map, active_inst_idx_map):
+		def collate_active_info(src, bs, da, inst_idx_to_position_map, active_inst_idx_map):
 			# Sentences which are still active are collected,
 			# so the decoder will not run on completed sentences.
 			n_prev_active_inst = len(inst_idx_to_position_map)
 			active_inst_idx = [inst_idx_to_position_map[k] for k in active_inst_idx_list]
 			active_inst_idx = torch.LongTensor(active_inst_idx).to(device)
 		
-			active_src_seq = collect_active_part(src, active_inst_idx, n_prev_active_inst, n_bm)      
-			active_act_vecs = collect_active_part(act_vecs, active_inst_idx, n_prev_active_inst, n_bm)
+			active_src_seq = collect_active_part(src, active_inst_idx, n_prev_active_inst, n_bm) 
+			# act_vecs = collect_active_part(act_vecs, active_inst_idx, n_prev_active_inst, n_bm)
 
-			active_inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)       
-			return active_src_seq, active_act_vecs, active_inst_idx_to_position_map
+			active_inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)
+			return active_src_seq, bs, da, active_inst_idx_to_position_map
 			
-		def beam_decode_step(inst_dec_beams, len_dec_seq, active_inst_idx_list, src,act_vecs, inst_idx_to_position_map, n_bm):
+		def beam_decode_step(inst_dec_beams, len_dec_seq, active_inst_idx_list, src,bs,da, inst_idx_to_position_map, n_bm):
 			''' Decode and update beam status, and then return active beam idx '''
 			n_active_inst = len(inst_idx_to_position_map)
 				
@@ -318,7 +345,8 @@ class Joint_model_v2(nn.Module):
 			dec_partial_seq = dec_partial_seq.view(-1, len_dec_seq)
 			
 			# print( src.shape, dec_partial_seq.shape , act_vecs.shape) # src is 50, 150
-			logits = self.forward(src.transpose(0,1) , dec_partial_seq.transpose(0,1), act_vecs.transpose(0, 1))[-1, :, :].unsqueeze(0) # error here
+			logits, _, _ = self.forward(src.transpose(0,1), bs.transpose(0, 1), da.transpose(0,1), dec_partial_seq.transpose(0,1),)
+			logits = logits [-1, :, :].unsqueeze(0)
 
 			# print(logits.shape)
 			word_prob = F.log_softmax(logits, dim=2)
@@ -337,11 +365,12 @@ class Joint_model_v2(nn.Module):
 			
 		with torch.no_grad():
 			# repeat src n_bm times
-			# act_vecs shape is bs,44 after T
+			# bs shape is bs,50 after T
 
 			src = src.repeat(1, n_bm).reshape(batch_size*n_bm , -1) # bm*batch_size, msl*mdl
-			act_vecs = act_vecs.repeat(1, n_bm).reshape(batch_size*n_bm, -1)
-			# act_vecs -> bs*n_bm, 44
+			bs = bs.repeat(1, n_bm).reshape(batch_size*n_bm, -1)
+			da = da.repeat(1, n_bm).reshape(batch_size*n_bm, -1)
+			# bs -> bs*n_bm, 50
 
 			
 			inst_dec_beams = [Beam(n_bm, device=device) for _ in range(batch_size)]
@@ -349,10 +378,10 @@ class Joint_model_v2(nn.Module):
 			inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)
 			
 			for len_dec_seq in range(1, max_sent_len+1):
-				active_inst_idx_list = beam_decode_step(inst_dec_beams, len_dec_seq, active_inst_idx_list, src, act_vecs,  inst_idx_to_position_map, n_bm)
+				active_inst_idx_list = beam_decode_step(inst_dec_beams, len_dec_seq, active_inst_idx_list, src, bs, da,  inst_idx_to_position_map, n_bm)
 				if not active_inst_idx_list:
 					break
-				src, act_vecs,  inst_idx_to_position_map = collate_active_info(src, act_vecs, inst_idx_to_position_map, active_inst_idx_list)
+				src, bs, da, inst_idx_to_position_map = collate_active_info(src, bs, da, inst_idx_to_position_map, active_inst_idx_list)
 				
 			def collect_hypothesis_and_scores(inst_dec_beams, n_best):
 				all_hyp, all_scores = [], []
