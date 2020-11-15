@@ -165,7 +165,7 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , batch_size, criterion, split, method='beam', beam_size=None):
 	batch_size = args.batch_size
 
-	logger.debug('{} search {}'.format(method, split))
+	logger.debug('=========== {} search {} ==========='.format(method.upper(), split.upper()))
 	if method=='beam':
 		logger.debug('Beam size {}'.format(beam_size))
 	model.eval()
@@ -193,9 +193,9 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					output = model.translate_batch(data, act_vecs, beam_size , batch_size_curr) 
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap]) # .module. if using dataparallel
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da) # .module. if using dataparallel
 				else: # da_output_i in individal vocab indices
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap])
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da)
 
 			if torch.is_tensor(output): # greedy search
 				# print(bs_logits.shape, bs.shape) - torch.Size([49, 32, 1515]) torch.Size([50, 32])
@@ -329,7 +329,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 	logger.debug('At begin of training, Best val loss ground : {:0.7f} Best bleu: {:0.4f}, Best criteria: {:0.4f}'.format(best_val_loss_ground, best_val_bleu, best_criteria))
 	logger.debug('====> STARTING TRAINING NOW')
 
-	val_epoch_freq = 2
+	val_epoch_freq = 4
 	for epoch in range(1, args.epochs + 1):
 
 		epoch_start_time = time.time()
@@ -621,9 +621,9 @@ def run(args, optuna_callback=None):
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser() 
 
-	parser.add_argument("-embed", "--embedding_size", default=100, type=int, help = "Give embedding size")
+	parser.add_argument("-embed", "--embedding_size", default=160, type=int, help = "Give embedding size")
 	parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads")
-	parser.add_argument("-hid", "--nhid", default=100, type=int,  help = "Give hidden size")
+	parser.add_argument("-hid", "--nhid", default=160, type=int,  help = "Give hidden size")
 
 	parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1")
 	parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2")
