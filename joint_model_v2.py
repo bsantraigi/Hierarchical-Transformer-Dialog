@@ -217,7 +217,7 @@ class Joint_model_v2(nn.Module):
 		return output, output_max
 
 
-	def greedy_search(self, src, batch_size, imaps, true_belief, true_da):
+	def greedy_search(self, src, batch_size, imaps): #, true_belief=None, true_da=None):
 		# Index 2 is SOS, index 3 is EOS in all vocabs
 		max_sent_len = 50
 		max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
@@ -244,12 +244,16 @@ class Joint_model_v2(nn.Module):
 		# - while computing bs loss remove SOS in belief targets with logits.
 		# belief = torch.cat([belief, belief_eos]) # should append EOS at end?
 
-
-# 		_belief = true_belief
 		belief = postprocess(belief)#pad after first eos
-		bs_mask = _gen_mask_sent(belief.shape[0])
-		bs_pad_mask = (belief==0).transpose(0,1)
-		belief_memory = self.encoder(belief)*math.sqrt(self.ninp) # 50, bs, embed
+# 		if true_belief is not None:
+# 			_belief = true_belief
+# 		else:
+# 			_belief = belief
+
+		_belief = belief
+		bs_mask = _gen_mask_sent(_belief.shape[0])
+		bs_pad_mask = (_belief==0).transpose(0,1)
+		belief_memory = self.encoder(_belief)*math.sqrt(self.ninp) # 50, bs, embed
 
 		belief_memory = self.pos_encoder(belief_memory)
 
@@ -265,12 +269,16 @@ class Joint_model_v2(nn.Module):
 		# da - [51, 32] - with sos
 		# da_logits - ([50, 32, V])
 		# da = torch.cat([da, eos_tokens])
-
-# 		_da = true_da
+		
 		da = postprocess(da)
-		da_mask = _gen_mask_sent(da.shape[0])
-		da_pad_mask = (da==0).transpose(0,1)
-		da_memory = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
+# 		if true_da is not None:
+# 			_da = true_da
+# 		else:
+# 			_da = da
+		_da = da
+		da_mask = _gen_mask_sent(_da.shape[0])
+		da_pad_mask = (_da==0).transpose(0,1)
+		da_memory = self.encoder(_da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
 
 		da_memory = self.pos_encoder(da_memory)
 

@@ -193,9 +193,11 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					output = model.translate_batch(data, act_vecs, beam_size , batch_size_curr) 
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da) # .module. if using dataparallel
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(
+						data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap]) #, true_belief=None, true_da=da) # .module. if using dataparallel
 				else: # da_output_i in individal vocab indices
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da)
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(
+						data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap]) #, true_belief=None, true_da=da)
 
 			if torch.is_tensor(output): # greedy search
 				# print(bs_logits.shape, bs.shape) - torch.Size([49, 32, 1515]) torch.Size([50, 32])
@@ -275,6 +277,14 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 				evaluate_dials[all_dialog_files[i]].append(h)
 			else:
 				evaluate_dials[all_dialog_files[i]]=[h]
+		
+		# Save model predictions to json also for later evaluation
+		if method=='beam':
+			model_turns_file = args.log_path+'model_turns_beam_'+str(beam_size)+'_'+split+'.json'
+		elif method=='greedy':
+			model_turns_file = args.log_path+'model_turns_greedy_'+split+'.json'
+		with open(model_turns_file, 'w') as f:
+			json.dump(evaluate_dials, f)
 
 		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
 		
@@ -603,7 +613,7 @@ def run(args, optuna_callback=None):
 		return
 
 	# best_val_loss_ground = load_model(model, args.log_path +'checkpoint_criteria.pt')
-	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+# 	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	logger.debug('Testing model\n')
