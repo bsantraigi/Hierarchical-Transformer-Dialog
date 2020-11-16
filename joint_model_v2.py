@@ -330,7 +330,8 @@ class Joint_model_v2(nn.Module):
 			active_inst_idx = torch.LongTensor(active_inst_idx).to(device)
 		
 			active_src_seq = collect_active_part(src, active_inst_idx, n_prev_active_inst, n_bm) 
-			# act_vecs = collect_active_part(act_vecs, active_inst_idx, n_prev_active_inst, n_bm)
+			bs = collect_active_part(bs, active_inst_idx, n_prev_active_inst, n_bm)
+			da = collect_active_part(da, active_inst_idx, n_prev_active_inst, n_bm)
 
 			active_inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)
 			return active_src_seq, bs, da, active_inst_idx_to_position_map
@@ -344,8 +345,8 @@ class Joint_model_v2(nn.Module):
 			dec_partial_seq = torch.stack(dec_partial_seq).to(device)
 			dec_partial_seq = dec_partial_seq.view(-1, len_dec_seq)
 			
-			# print( src.shape, dec_partial_seq.shape , act_vecs.shape) # src is 50, 150
-			logits, _, _ = self.forward(src.transpose(0,1), bs.transpose(0, 1), da.transpose(0,1), dec_partial_seq.transpose(0,1),)
+			# print(src.transpose(0,1).shape, bs.transpose(0, 1).shape, da.transpose(0,1).shape, dec_partial_seq.transpose(0,1).shape)
+			logits, _, _ = self.forward(src.transpose(0,1), bs.transpose(0, 1), da.transpose(0,1), dec_partial_seq.transpose(0,1))
 			logits = logits [-1, :, :].unsqueeze(0)
 
 			# print(logits.shape)
