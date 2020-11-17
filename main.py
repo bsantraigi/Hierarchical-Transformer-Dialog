@@ -192,7 +192,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					output = model.module.translate_batch(data, bs_output, da_output, beam_size, batch_size_curr)
 				else:
 					bs_output, da_output = model.greedy_search_bsda(data, None, None, batch_size_curr)
-					output = model.translate_batch(data, bs_output, da_output, beam_size , batch_size_curr) 
+					output = model.translate_batch(data, bs_output, da_output, beam_size , batch_size_curr)
 
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
@@ -476,9 +476,9 @@ def test_split(split, model, args, criterion):
 	# beam 2
 	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 2)
 	# beam 3
-	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 3)
-	# beam 5
-	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 5)
+	# evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 3)
+	# # beam 5
+	# evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 5)
 	
 
 
@@ -536,7 +536,9 @@ for w, v in Constants.V_actions_wtoi.items():
 def run(args, optuna_callback=None):
 	global logger 
 
-	if args.model_type=="action_pred":
+	if args.log_path!="notset":
+		log_path = args.log_path
+	elif args.model_type=="action_pred":
 		log_path ='running/action_pred/'
 	elif args.model_type=="joint":
 		log_path ='running/joint_simple/'
@@ -611,7 +613,7 @@ def run(args, optuna_callback=None):
 	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
 		
 	optimizer = torch.optim.Adam(model.parameters(), lr= 0.000125, betas=(0.9, 0.98), eps=1e-9)
-	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.98)
+	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.96)
 
 	logger.debug('\n\n\n=====>\n')
 
@@ -631,8 +633,8 @@ def run(args, optuna_callback=None):
 	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
 	# logger.debug('Test critiera: {:0.3f}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
-	# # To get greedy, beam(2,3,5) scores for val, test 
-	# test_split('val', model, args, criterion)
+	# To get greedy, beam(2,3,5) scores for val, test 
+	test_split('val', model, args, criterion)
 	test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
@@ -654,7 +656,8 @@ if __name__ == '__main__':
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
 	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
 	parser.add_argument("-lr", "--learning_rate",default=0.0001, type=float, help = "Give learning rate")
-	parser.add_argument("-model", "--model_type", default="joint", help="Give model name one of [joint, joint_v2, joint_v3, joint_v4, action_pred]")
+	parser.add_argument("-model", "--model_type", default="joint_v2", help="Give model name one of [joint, joint_v2, joint_v3, joint_v4, action_pred]")
+	parser.add_argument("-log_path", "--log_path", default="notset", help="Give log path name")
 
 	args = parser.parse_args()
 	run(args)
