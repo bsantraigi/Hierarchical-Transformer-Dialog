@@ -289,8 +289,8 @@ class Joint_model_v2(nn.Module):
 		belief_memory, memory, belief_logits, da_logits, pred_belief, da = self.greedy_search_bsda(src, _belief, _da, batch_size, True, use_gt)
 
 		pred_da = da
-		if use_gt:
-			da = _da
+		#if use_gt:
+		#	da = _da
 		da_mask = _gen_mask_sent(da.shape[0])
 		da_pad_mask = (da==0).transpose(0,1)
 		da_memory = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
