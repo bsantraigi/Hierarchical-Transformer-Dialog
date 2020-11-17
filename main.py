@@ -52,6 +52,19 @@ def get_files_joint(split): # dataset, dataset_counter, dataset_bs, dataset_da
 		return test, test_counter, test_bs, test_dialog_act
 	return ValueError
 	
+def shuffle(split):
+# train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses
+# shuffle all of these acc of train_counter: #u:#samples
+	dataset, dataset_counter, dataset_bs, dataset_da = get_files_joint(split)
+	dataset_responses, dataset_dialog_files = split_to_responses(split)
+	indices = range(0, len(dataset))
+	t =0
+	c = list(zip(dataset, dataset_bs, dataset_da, dataset_responses, dataset_dialog_files)) 
+	for k,v in dataset_counter.items():#shuffle from t,t+v
+		random.shuffle(c[t:t+v])
+		t += v
+	dataset, dataset_bs, dataset_da, dataset_responses, dataset_dialog_files = zip(*c)
+	return
 
 def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # losses per batch
 	model.train()
@@ -81,13 +94,10 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 		output, bs_logits , da_logits = model(data, bs, da, targets)
 
 		response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
-
 		belief_loss=criterion(bs_logits[:-1].reshape(-1, ntokens), bs[1:].reshape(-1))
-
 		da_loss=criterion(da_logits[:-1].reshape(-1, ntokens), da[1:].reshape(-1))  
 		
 		cur_loss = response_loss+belief_loss+da_loss
-		# cur_loss = belief_loss
 
 		loss = cur_loss / accumulated_steps
 		loss.backward()
@@ -137,13 +147,10 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 			output, bs_logits , da_logits = model(data, bs, da, targets)
 
 			response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
-
 			belief_loss=criterion(bs_logits[:-1].reshape(-1, ntokens), bs[1:].reshape(-1))
-
 			da_loss=criterion(da_logits[:-1].reshape(-1, ntokens), da[1:].reshape(-1))  
 
 			cur_loss = response_loss+belief_loss+da_loss
-			# cur_loss = belief_loss
 
 			total_loss += cur_loss.item()*batch_size_curr
 			total_response_loss += response_loss.item()*batch_size_curr
@@ -222,21 +229,9 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 				if i==0:
 					hyp = output_max
 					ref = targets.transpose(0,1)
-
-					# bs_pred = bs_output.transpose(0,1) # bs, 50 - with sos
-					# bs_act = bs.transpose(0,1) #bs,50
-
-					# da_pred = da_output.transpose(0,1) # bs, 51
-					# da_act = da.transpose(0,1)
 				else:
 					hyp = torch.cat((hyp, output_max), dim=0)
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
-
-					# bs_pred= torch.cat([bs_pred, bs_output.transpose(0,1)])
-					# bs_act = torch.cat([bs_act, bs.transpose(0,1)])
-
-					# da_pred=torch.cat([da_pred, da_output.transpose(0,1)])# bs, 51
-					# da_act=torch.cat([da_act, da.transpose(0,1)])
 			else: # beam search
 				if i==0:
 					hyp = [torch.tensor(l) for l in output]
@@ -245,7 +240,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 					hyp.extend([torch.tensor(l) for l in output])
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
-			if i==0:
+			if i==0: #both greedy,beam
 				bs_pred = bs_output.transpose(0,1) # bs, 50 - with sos
 				bs_act = bs.transpose(0,1) #bs,50
 				da_pred = da_output.transpose(0,1) # bs, 51
@@ -350,19 +345,21 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 
 	val_epoch_freq = 4
 	for epoch in range(1, args.epochs + 1):
-
+		shuffle('train')
 		epoch_start_time = time.time()
-		train_loss = train_epoch(model, epoch, args.batch_size, criterion, optimizer, scheduler)
+		# train_loss = train_epoch(model, epoch, args.batch_size, criterion, optimizer, scheduler)
 
 		val_loss_ground = get_loss_nograd(model, epoch, args.batch_size, criterion, 'val')
-
-		if val_loss_ground < best_val_loss_ground:
+		
+		if val_loss_ground <= best_val_loss_ground:
 			best_val_loss_ground=val_loss_ground
 			save_model(model, args, 'checkpoint_bestloss.pt',train_loss, val_loss_ground, -1)
+		else:
+			scheduler.step()
 
-		# if epoch < 15:
-		# 	save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
-		# 	continue
+		if epoch < 9:
+			save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
+			continue
 
 		# for every "val_epoch_freq" epochs, evaluate the metrics
 		if epoch%val_epoch_freq!=0:
@@ -374,11 +371,6 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 
 		if optuna_callback is not None:
 			optuna_callback(epoch/val_epoch_freq, val_criteria) # Pass the score metric on validation set here.
-
-		# if val_bleu > best_val_bleu:
-		# 	best_val_bleu = val_bleu
-		# 	# logger.debug('==> New optimum found wrt val bleu')
-		# 	save_model(model, args, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_criteria)
 		
 		if  val_criteria > best_criteria:
 			best_criteria = val_criteria
@@ -472,20 +464,20 @@ def testing(model, args, criterion, split, method):
 def test_split(split, model, args, criterion):
 	data, dataset_counter,  dataset_bs, dataset_da = get_files_joint(split)
 	# greedy
-	# evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'greedy')
+	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'greedy')
 	# beam 2
 	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 2)
 	# beam 3
-	# evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 3)
+	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 3)
 	# # beam 5
-	# evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 5)
+	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 5)
 	
 
 
 # global logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
+formatter = logging.Formatter("[%(asctime)s]:%(message)s")
 
 
 train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = gen_dataset_joint('train')
