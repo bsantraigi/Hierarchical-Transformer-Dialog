@@ -22,6 +22,7 @@ from utils import *
 from model import *
 from joint_model import *
 from joint_model_v2 import *
+from joint_model_v2_2 import *
 from joint_model_v3 import *
 from joint_model_v4 import *
 from metrics import *
@@ -60,7 +61,7 @@ def shuffle(split):
 	indices = range(0, len(dataset))
 	t =0
 	c = list(zip(dataset, dataset_bs, dataset_da, dataset_responses, dataset_dialog_files)) 
-	for k,v in dataset_counter.items():#shuffle from t,t+v
+	for k,v in dataset_counter.items():# from t,t+v
 		random.shuffle(c[t:t+v])
 		t += v
 	dataset, dataset_bs, dataset_da, dataset_responses, dataset_dialog_files = zip(*c)
@@ -343,11 +344,11 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 	logger.debug('At begin of training, Best val loss ground : {:0.7f} Best bleu: {:0.4f}, Best criteria: {:0.4f}'.format(best_val_loss_ground, best_val_bleu, best_criteria))
 	logger.debug('====> STARTING TRAINING NOW')
 
-	val_epoch_freq = 4
+	val_epoch_freq = 3
 	for epoch in range(1, args.epochs + 1):
 		shuffle('train')
 		epoch_start_time = time.time()
-		# train_loss = train_epoch(model, epoch, args.batch_size, criterion, optimizer, scheduler)
+		train_loss = train_epoch(model, epoch, args.batch_size, criterion, optimizer, scheduler)
 
 		val_loss_ground = get_loss_nograd(model, epoch, args.batch_size, criterion, 'val')
 		
@@ -357,7 +358,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		else:
 			scheduler.step()
 
-		if epoch < 9:
+		if epoch < 8:
 			save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
 			continue
 
@@ -536,6 +537,8 @@ def run(args, optuna_callback=None):
 		log_path ='running/joint_simple/'
 	elif args.model_type=="joint_v2":
 		log_path ='running/joint_v2/'
+	elif args.model_type=="joint_v2_2":
+		log_path ='running/joint_v2_2/'
 	elif args.model_type=="joint_v3":
 		log_path ='running/joint_v3/'
 	elif args.model_type=="joint_v4":
@@ -582,6 +585,9 @@ def run(args, optuna_callback=None):
 	elif args.model_type=="joint_v2":
 		model = Joint_model_v2(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
 		criterion = nn.CrossEntropyLoss(ignore_index=0)
+	elif args.model_type=="joint_v2_2":
+		model = Joint_model_v2_2(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
+		criterion = nn.CrossEntropyLoss(ignore_index=0)
 	elif args.model_type=="joint_v3":
 		model = Joint_model_v3(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
 		criterion = nn.CrossEntropyLoss(ignore_index=0)
@@ -605,7 +611,7 @@ def run(args, optuna_callback=None):
 	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
 		
 	optimizer = torch.optim.Adam(model.parameters(), lr= 0.000125, betas=(0.9, 0.98), eps=1e-9)
-	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.96)
+	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.95)
 
 	logger.debug('\n\n\n=====>\n')
 
@@ -648,7 +654,7 @@ if __name__ == '__main__':
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
 	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
 	parser.add_argument("-lr", "--learning_rate",default=0.0001, type=float, help = "Give learning rate")
-	parser.add_argument("-model", "--model_type", default="joint_v2", help="Give model name one of [joint, joint_v2, joint_v3, joint_v4, action_pred]")
+	parser.add_argument("-model", "--model_type", default="joint_v2", help="Give model name one of [joint, joint_v2, joint_v2_2, joint_v3, joint_v4, action_pred]")
 	parser.add_argument("-log_path", "--log_path", default="notset", help="Give log path name")
 
 	args = parser.parse_args()
