@@ -53,19 +53,21 @@ def get_files_joint(split): # dataset, dataset_counter, dataset_bs, dataset_da
 		return test, test_counter, test_bs, test_dialog_act
 	return ValueError
 	
-def shuffle(split):
-# train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses
-# shuffle all of these acc of train_counter: #u:#samples
+
+def shuffle(split): # shuffle each diag_len acc of counter: 
 	dataset, dataset_counter, dataset_bs, dataset_da = get_files_joint(split)
 	dataset_responses, dataset_dialog_files = split_to_responses(split)
 	indices = range(0, len(dataset))
 	t =0
-	c = list(zip(dataset, dataset_bs, dataset_da, dataset_responses, dataset_dialog_files)) 
+	c = list(zip(dataset, dataset_bs, dataset_da, dataset_responses, dataset_dialog_files))
+	ans = []
 	for k,v in dataset_counter.items():# from t,t+v
-		random.shuffle(c[t:t+v])
+		temp = c[t:t+v]
+		random.shuffle(temp)
+		c[t:t+v]=temp
 		t += v
 	dataset, dataset_bs, dataset_da, dataset_responses, dataset_dialog_files = zip(*c)
-	return
+	return zip(*c)
 
 def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # losses per batch
 	model.train()
@@ -332,6 +334,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 # stat_cuda('before training')
 def training(model, args, criterion, optimizer, scheduler, optuna_callback=None):
 	global best_val_bleu, criteria, best_val_loss_ground
+	global train, train_counter, train_bs, train_dialog_act, train_responses, train_dialog_files
 	best_model = None
 	train_losses = []
 	val_losses = []
@@ -346,7 +349,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 
 	val_epoch_freq = 3
 	for epoch in range(1, args.epochs + 1):
-		shuffle('train')
+		train, train_bs, train_dialog_act, train_responses, train_dialog_files = shuffle('train')
 		epoch_start_time = time.time()
 		train_loss = train_epoch(model, epoch, args.batch_size, criterion, optimizer, scheduler)
 
@@ -485,22 +488,11 @@ train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_respo
 val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses = gen_dataset_joint('val')
 test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses =gen_dataset_joint('test')
 
-# # save datasets
-# with open('data/train_joint.pkl', 'wb') as f:
-# 	pkl.dump([train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses], f)
-# with open('data/val_joint.pkl', 'wb') as f:
-# 	pkl.dump([val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses], f)
-# with open('data/test_joint.pkl', 'wb') as f:
-# 	pkl.dump([test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses],f)
-
-# # load datasets
-# with open('data/train_joint.pkl', 'rb') as f:
-# 	train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = pkl.load(f)
-# with open('data/val_joint.pkl', 'rb') as f:
-# 	val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses =pkl.load(f)
-# with open('data/test_joint.pkl', 'rb') as f:
-# 	test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses=pkl.load(f)
-
+# print(val[0])
+# val, val_bs, val_dialog_act, val_responses, val_dialog_files = shuffle( 'val')
+# print("******************************************************")
+# print(val[0])
+# exit()
 
 max_sent_len = 50
 
