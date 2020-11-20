@@ -415,10 +415,6 @@ class Transformer_acts(nn.Module):
 		# decoder - tgt shape - (msl, batch_size, embed)- add act_vec of (None ,bs,embed)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
 
-		# hieract_graphids - 1, (44, emb_size) * act_vecs.T - (bs, 44), 1 ->
-		# hieract_graph_emb -   bs, 44*emb_size
-		hieract_graph_emb = (self.encoder(self.hieract_graphids).unsqueeze(0) * act_vecs.transpose(0,1).unsqueeze(2)).reshape(batch_size, -1).unsqueeze(0)
-
 		tgt = self.pos_encoder(tgt) + self.act_embedding(hieract_graph_emb)
 		output = self.transformer_decoder(tgt, memory, tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
 		
