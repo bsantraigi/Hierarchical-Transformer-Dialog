@@ -131,7 +131,7 @@ def data_gen_acts(dataset,  datatset_db, act_vecs, batch_size, i, wordtoidx):
 	target_tensor = torch.zeros(batch_size, max_sent_len, device=device)
 	label_tensor = torch.zeros(batch_size, max_sent_len, device=device)
 
-	db_tensor = torch.FloatTensor(vectorised_db, device=device) # batch_size,50
+	db_tensor = torch.tensor(vectorised_db, device=device).float() # batch_size,50
 
 	for idx,(seq, seqlen) in enumerate(zip(vectorised_seq, seq_lengths)):
 		for i in range(seqlen-1):
