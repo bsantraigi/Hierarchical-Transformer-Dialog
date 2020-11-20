@@ -121,7 +121,7 @@ def data_gen_acts(dataset,  datatset_db, act_vecs, batch_size, i, wordtoidx):
 	for d, db in zip(dataset[i:upper_bound], datatset_db[i:upper_bound]):
 #         print(len(d), end=' ')
 		vectorised_seq.append([[wordtoidx.get(word, 1) for word in tokenize_en(sent)] for sent in d])
-		vectorised_db.append([wordtoidx.get(word, 1) for word in tokenize_en(db)[:-1]])#-1 to skip last space
+		vectorised_db.append([wordtoidx.get(word, 1) for word in tokenize_en(db)])
 
 	batch_actvecs = torch.tensor(act_vecs[i:upper_bound], device=device)
 
@@ -131,7 +131,7 @@ def data_gen_acts(dataset,  datatset_db, act_vecs, batch_size, i, wordtoidx):
 	target_tensor = torch.zeros(batch_size, max_sent_len, device=device)
 	label_tensor = torch.zeros(batch_size, max_sent_len, device=device)
 
-	db_tensor = torch.tensor(vectorised_db, device=device).transpose(0,1) # 50, batch_size
+	db_tensor = torch.FloatTensor(vectorised_db, device=device) # batch_size,50
 
 	for idx,(seq, seqlen) in enumerate(zip(vectorised_seq, seq_lengths)):
 		for i in range(seqlen-1):
@@ -139,6 +139,7 @@ def data_gen_acts(dataset,  datatset_db, act_vecs, batch_size, i, wordtoidx):
 		target_tensor[idx, :len(seq[seqlen-1])] = torch.LongTensor(seq[seqlen-1]) # last sentence in dialog
 		label_tensor[idx, :len(seq[seqlen-1])-1] = torch.LongTensor(seq[seqlen-1][1:]) # last sentence in dialog from first word, ie without sos
 	
+	seq_tensor = torch.cat([db_tensor.unsqueeze(1), seq_tensor], dim=1)
 	seq_tensor = seq_tensor.transpose(1,2).reshape(batch_size, -1).transpose(0,1)
 	# seq_tensor - (msl*mdl , bs)
 
