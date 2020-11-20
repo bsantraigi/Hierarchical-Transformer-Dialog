@@ -41,6 +41,7 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 	data = []
 	max_sent_len = 48
 	responses = []
+	MS = 50
 
 	for x in dataset:
 		dialog_file = x['file']
@@ -53,6 +54,12 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 			sys = 'SOS '+' '.join(turn['sys'].lower().strip().split()[:max_sent_len])+' EOS'
 
 			src.append(user)
+
+			db = 'SOS '
+			for k, v in turn['source'].items():#can be empty
+				db += ' '.join(k[1:-1].split('_')) + " " #1:-1 to skip [,]
+			db += 'EOS'
+			db  = db + (MS -len(db.split()))*' PAD' #db len always less than 50
 
 			if predicted_acts is not None:
 				hierarchical_act_vecs = np.asarray(predicted_acts[dialog_file][str(turn_num)], 'int64')
@@ -68,7 +75,7 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 			context = src
 			true_response = ('SOS '+' '.join(turn['sys'].lower().strip().split())+' EOS')
 
-			data.append([turn_num, src[:(2*turn_num+1)], [sys], hierarchical_act_vecs, dialog_file, true_response])
+			data.append([turn_num, src[:(2*turn_num+1)], [sys], hierarchical_act_vecs, dialog_file, true_response, db])
 
 			src.append(sys)
 			
@@ -85,11 +92,12 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 	all_hierarchial_act_vecs = [f[3] for f in data]
 	all_dialog_files = [f[4] for f in data]
 	true_responses = [f[5] for f in data]
+	db_results = [f[6] for f in data]
 	
 	assert(len(all_data)==len(all_hierarchial_act_vecs))
 	# print('Loaded and save ', split_name, ' dataset')
 	
-	return all_data, c, all_hierarchial_act_vecs, all_dialog_files, true_responses
+	return all_data, c, all_hierarchial_act_vecs, all_dialog_files, true_responses, db_results
 
 
 def build_vocab(train, load):

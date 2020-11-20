@@ -48,6 +48,33 @@ def split_to_responses(split): # return original responses
 	if split=='test':
 		return test_responses
 	return ValueError
+
+
+def name_to_dataset(split):
+	if split=='train':
+		return train, train_counter, train_db, train_hierarchial_actvecs
+	if split=='val':
+		return val, val_counter, val_db, val_hierarchial_actvecs
+	if split=='test':
+		return test, test_counter, test_db, test_hierarchial_actvecs
+	print('Error')
+	return ValueError
+
+def shuffle(split): # shuffle each diag_len acc of counter: 
+	dataset, dataset_counter, dataset_db, dataset_hier_actvecs = name_to_dataset(split)
+	dataset_responses = split_to_responses(split)
+	dataset_dialog_files = split_to_files(split)
+	indices = range(0, len(dataset))
+	t =0
+	c = list(zip(dataset, dataset_db, dataset_hier_actvecs, dataset_responses, dataset_dialog_files))
+	ans = []
+	for k,v in dataset_counter.items():# from t,t+v
+		temp = c[t:t+v]
+		random.shuffle(temp)
+		c[t:t+v]=temp
+		t += v
+	dataset, dataset_db, dataset_hier_actvecs, dataset_responses, dataset_dialog_files= zip(*c)
+	return zip(*c)
 	
 
 def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # losses per batch
@@ -65,7 +92,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	accumulated_steps = 3
 	optimizer.zero_grad()
 
-	for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(train, train_counter, train_hierarchial_actvecs, batch_size, wordtoidx)), total=nbatches):
+	for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(train, train_counter, train_db, train_hierarchial_actvecs, batch_size, wordtoidx)): #), total=nbatches):
 
 		batch_size_curr = data.shape[1]
 		# optimizer.zero_grad() 			
@@ -92,12 +119,15 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 
 
 
-def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size, criterion, split, method='beam', beam_size=None):
+def evaluate(model, args, batch_size, criterion, split, method='beam', beam_size=None):
 	batch_size = args.batch_size
 
-	logger.debug('{} search {}'.format(method, split))
+	dataset, dataset_counter, dataset_db, dataset_act_vecs = name_to_dataset(split)
+
+	logger.debug('========={} search {}=========='.format(method, split))
 	if method=='beam':
 		logger.debug('Beam size {}'.format(beam_size))
+
 	model.eval()
 	total_loss =0
 	ntokens = len(wordtoidx)
@@ -106,7 +136,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 	nbatches = len(dataset)//batch_size
 
 	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs, batch_size, wordtoidx)), total=len(dataset)//batch_size):
+		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_db, dataset_act_vecs, batch_size, wordtoidx)): #, total=len(dataset)//batch_size):
 
 			batch_size_curr = targets.shape[1]
 			# assert(data.shape[1]==act_vecs.shape[1])
@@ -187,7 +217,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 		
 		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
 		
-		data, _, _ = name_to_dataset(split)
+		data, _, _, _ = name_to_dataset(split)
 		
 		if method=='beam':
 			pred_file = open(args.log_path+'pred_beam_'+str(beam_size)+'_'+split+'.txt', 'w')
@@ -213,10 +243,10 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 	start_time = time.time()
 	ntokens = len(idxtoword)
 	
-	dataset, dataset_counter, dataset_act_vecs = name_to_dataset(split)	
+	dataset, dataset_counter, dataset_db, dataset_act_vecs = name_to_dataset(split)	
 	
 	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs,  batch_size, wordtoidx)):
+		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_db, dataset_act_vecs,  batch_size, wordtoidx)):
 
 			batch_size_curr = data.shape[1]
 			output = model(data, targets,  act_vecs)
@@ -226,7 +256,7 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 		elapsed = time.time()-start_time
 
 	total_loss /= len(dataset)
-	logger.debug('{} \tLoss(using ground truths): {:0.7f}\tTime taken: {:0.1f}s'.format(split, total_loss, elapsed))
+	logger.debug('{} \tLoss(using ground truths): {:0.3f}\tTime taken: {:0.1f}s'.format(split, total_loss, elapsed))
 	return total_loss
 
 
@@ -234,6 +264,8 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 # stat_cuda('before training')
 def training(model, args, criterion, optimizer, scheduler, optuna_callback=None):
 	global best_val_bleu, criteria, best_val_loss_ground
+	global train, train_db, train_hierarchial_actvecs, train_responses, train_dialog_files, train_counter
+
 	best_model = None
 	train_losses = []
 	val_losses = []
@@ -243,11 +275,12 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 	best_val_bleu=-float("inf")
 	best_criteria=-float("inf")
 
-	logger.debug('At begin of training, Best val loss ground : {:0.7f} Best bleu: {:0.4f}, Best criteria: {:0.4f}'.format(best_val_loss_ground, best_val_bleu, best_criteria))
+	logger.debug('At begin of training, Best val loss ground : {:0.3f} Best bleu: {:0.4f}, Best criteria: {:0.4f}'.format(best_val_loss_ground, best_val_bleu, best_criteria))
 	logger.debug('====> STARTING TRAINING NOW')
 
 	val_epoch_freq = 3
 	for epoch in range(1, args.epochs + 1):
+		train, train_db, train_hierarchial_actvecs, train_responses, train_dialog_files = shuffle('train')
 
 		epoch_start_time = time.time()
 		train_loss = train_epoch(model, epoch, args.batch_size, criterion, optimizer, scheduler)
@@ -257,21 +290,23 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		train_losses.append(train_loss)
 		val_losses.append(val_loss_ground)
 
-		if val_loss_ground < best_val_loss_ground:
+		if val_loss_ground <= best_val_loss_ground:
 			best_val_loss_ground = val_loss_ground
 			logger.debug('==> New optimum found wrt val loss')
 			save_model(model, args, 'checkpoint_bestloss.pt',train_loss,val_loss_ground, -1)
+		else:
+			scheduler.step()
 
-		# if epoch < 15:
-		# 	save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
-		# 	continue
+		if epoch < 1:
+			save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
+			continue
 
 		# for every "val_epoch_freq" epochs, evaluate the metrics
 		if epoch%val_epoch_freq!=0:
 			save_model(model, args, 'checkpoint.pt', train_loss, val_loss_ground, -1)
 			continue
 
-		_, val_bleu, val_f1entity, matches, successes = evaluate(model, args, val, val_counter, val_hierarchial_actvecs, args.batch_size, criterion, 'val', method='greedy')
+		_, val_bleu, val_f1entity, matches, successes = evaluate(model, args, args.batch_size, criterion, 'val', method='greedy')
 		val_criteria = val_bleu+0.5*matches+0.5*successes
 
 		if optuna_callback is not None:
@@ -292,8 +327,6 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		scheduler.step()
 	
 	return best_model
-
-
 
 
 def save_model(model, args, name, train_loss, val_loss, val_bleu):
@@ -365,47 +398,32 @@ def load_model(model, checkpoint='checkpoint.pt'):
 
 
 
-def name_to_dataset(split):
-	if split=='train':
-		return train, train_counter, train_hierarchial_actvecs
-	if split=='val':
-		return val, val_counter, val_hierarchial_actvecs
-	if split=='test':
-		return test, test_counter, test_hierarchial_actvecs
-	print('Error')
-
-
-
 def testing(model, args, criterion, split, method):
-	data, dataset_counter, dataset_act_vecs = name_to_dataset(split)
 	if method =='greedy':
-		return evaluate(model, args, data,dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, method='greedy')
+		return evaluate(model, args, args.batch_size, criterion, split, method='greedy')
 	elif method=='beam':
-		return evaluate(model, args, data, dataset_counter, dataset_act_vecs , args.batch_size, criterion, split, method='beam')
+		return evaluate(model, args, args.batch_size, criterion, split, method='beam')
 
 
 def test_split(split, model, args, criterion):
-	data, dataset_counter, dataset_act_vecs = name_to_dataset(split)
 	# greedy
-	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'greedy')
+	evaluate(model, args, args.batch_size, criterion, split, 'greedy')
 	# beam 2
-	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 2)
+	evaluate(model, args, args.batch_size, criterion, split, 'beam', 2)
 	# beam 3
-	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 3)
+	evaluate(model, args, args.batch_size, criterion, split, 'beam', 3)
 	# beam 5
-	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 5)
+	evaluate(model, args, args.batch_size, criterion, split, 'beam', 5)
 	
-
 
 # global logger
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
 
-train,train_counter,train_hierarchial_actvecs,train_dialog_files, train_responses = gen_dataset_with_acts('train')
-val, val_counter, val_hierarchial_actvecs, val_dialog_files, val_responses = gen_dataset_with_acts('val')
-test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses =gen_dataset_with_acts('test')
-
+train,train_counter,train_hierarchial_actvecs,train_dialog_files, train_responses, train_db = gen_dataset_with_acts('train')
+val, val_counter, val_hierarchial_actvecs, val_dialog_files, val_responses, val_db = gen_dataset_with_acts('val')
+test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses, test_db =gen_dataset_with_acts('test')
 
 max_sent_len = 50
 
@@ -498,12 +516,11 @@ def run(args, optuna_callback=None):
 
 	# logger.debug('Testing model\n')
 	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	# logger.debug('==>Test \tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}'.format(test_bleu, test_f1, test_matches, test_successes))
 	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)
-	# test_split('test', model, args, criterion)
+	test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	return val_bleu+0.5*(val_matches+val_successes)
