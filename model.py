@@ -346,7 +346,7 @@ class Transformer_acts(nn.Module):
 		
 		self.ninp = ninp
 
-		self.act_embedding = nn.Linear(44*self.ninp, self.ninp) # Comment this for transformers_dyn_hdsaslide_1 checkpoint
+		self.act_embedding = nn.Linear(44, self.ninp) # Comment this for transformers_dyn_hdsaslide_1 checkpoint
 
 		if ablation=='SET++':
 			self.mask_func = _gen_mask
@@ -415,7 +415,7 @@ class Transformer_acts(nn.Module):
 		# decoder - tgt shape - (msl, batch_size, embed)- add act_vec of (None ,bs,embed)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
 
-		tgt = self.pos_encoder(tgt) + self.act_embedding(hieract_graph_emb)
+		tgt = self.pos_encoder(tgt) + self.act_embedding(act_vecs.transpose(0,1)).unsqueeze(0)
 		output = self.transformer_decoder(tgt, memory, tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
 		
 		# check_nan(output, 'output')
