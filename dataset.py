@@ -67,7 +67,7 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 				slots = sorted(slots)
 				db_str += dom + " " + " ".join(slots) + " "
 
-			db_str += ' EOS'
+			db_str += ' EOS '
 			db_str  = db_str + (MS -len(db_str.split()))*' PAD' #db len always less than 50
 
 			if predicted_acts is not None:
