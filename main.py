@@ -174,10 +174,13 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 
 def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , batch_size, criterion, split, method='beam', beam_size=None):
 	batch_size = args.batch_size
+	use_gt = True
 
 	logger.debug('=========== {} search {} ==========='.format(method.upper(), split.upper()))
 	if method=='beam':
 		logger.debug('Beam size {}'.format(beam_size))
+	if use_gt:
+		logger.debug('Using ground truth bs while inference')
 	model.eval()
 	total_loss =0
 	total_bs_loss=0
@@ -198,17 +201,17 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 			if method=='beam':
 				if isinstance(model, nn.DataParallel):
 					# gives list of sentences itself
-					bs_output, da_output = model.module.greedy_search_bsda(data, None, None,  batch_size_curr)
+					bs_output, da_output = model.module.greedy_search_bsda(data, bs, None,  batch_size_curr, use_gt=use_gt)
 					output = model.module.translate_batch(data, bs_output, da_output, beam_size, batch_size_curr)
 				else:
-					bs_output, da_output = model.greedy_search_bsda(data, None, None, batch_size_curr)
+					bs_output, da_output = model.greedy_search_bsda(data, bs, None, batch_size_curr, use_gt =use_gt)
 					output = model.translate_batch(data, bs_output, da_output, beam_size , batch_size_curr)
 
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da, use_gt = False) # .module. if using dataparallel
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da, use_gt = use_gt) # .module. if using dataparallel
 				else: # da_output_i in individal vocab indices
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da, use_gt=False)
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da, use_gt= use_gt)
 
 			if torch.is_tensor(output): # greedy search
 				# print(bs_logits.shape, bs.shape) - torch.Size([49, 32, 1515]) torch.Size([50, 32])
@@ -603,7 +606,7 @@ def run(args, optuna_callback=None):
 	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
 		
 	optimizer = torch.optim.Adam(model.parameters(), lr= 0.000125, betas=(0.9, 0.98), eps=1e-9)
-	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.95)
+	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.9)
 
 	logger.debug('\n\n\n=====>\n')
 
@@ -615,7 +618,7 @@ def run(args, optuna_callback=None):
 		return
 
 	# best_val_loss_ground = load_model(model, args.log_path +'checkpoint_criteria.pt')
-	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	#_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 
@@ -624,11 +627,13 @@ def run(args, optuna_callback=None):
 	# logger.debug('Test critiera: {:0.3f}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# To get greedy, beam(2,3,5) scores for val, test 
-	test_split('val', model, args, criterion)
+	# test_split('val', model, args, criterion)
 	test_split('test', model, args, criterion)
 
-	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
-	return val_bleu+0.5*(val_matches+val_successes)
+	#_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
+	#val_criteria = val_bleu+0.5*(val_matches+val_successes)
+	val_criteria =0
+	return val_criteria
 
 
 if __name__ == '__main__':
