@@ -55,11 +55,20 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 
 			src.append(user)
 
-			db = 'SOS '
+			db = {}
 			for k, v in turn['source'].items():#can be empty
-				db += ' '.join(k[1:-1].split('_')) + " " #1:-1 to skip [,]
-			db += 'EOS'
-			db  = db + (MS -len(db.split()))*' PAD' #db len always less than 50
+				dom, slot = k[1:-1].split('_')
+				if dom not in db:
+					db[dom] = [slot]
+				else:
+					db[dom].append(slot)  #1:-1 to skip [,]
+			db_str = 'SOS '
+			for dom, slots in db.items():
+				slots = sorted(slots)
+				db_str += dom + " " + " ".join(slots) + " "
+
+			db_str += ' EOS'
+			db_str  = db_str + (MS -len(db_str.split()))*' PAD' #db len always less than 50
 
 			if predicted_acts is not None:
 				hierarchical_act_vecs = np.asarray(predicted_acts[dialog_file][str(turn_num)], 'int64')
@@ -75,7 +84,7 @@ def gen_dataset_with_acts(split_name): # [ no of turns , src, tgt, act_vecs, hie
 			context = src
 			true_response = ('SOS '+' '.join(turn['sys'].lower().strip().split())+' EOS')
 
-			data.append([turn_num, src[:(2*turn_num+1)], [sys], hierarchical_act_vecs, dialog_file, true_response, db])
+			data.append([turn_num, src[:(2*turn_num+1)], [sys], hierarchical_act_vecs, dialog_file, true_response, db_str])
 
 			src.append(sys)
 			

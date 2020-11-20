@@ -216,9 +216,7 @@ def evaluate(model, args, batch_size, criterion, split, method='beam', beam_size
 			json.dump(evaluate_dials, f)
 		
 		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
-		
-		data, _, _, _ = name_to_dataset(split)
-		
+				
 		if method=='beam':
 			pred_file = open(args.log_path+'pred_beam_'+str(beam_size)+'_'+split+'.txt', 'w')
 		elif method=='greedy':
@@ -226,7 +224,8 @@ def evaluate(model, args, batch_size, criterion, split, method='beam', beam_size
 
 		pred_file.write('\n\n***'+split+'***')
 		for idx, h, r in zip(indices, pred_hyp, pred_ref):
-			pred_file.write('\n\nContext: \n'+str('\n'.join(data[idx][:-1])))
+			pred_file.write('\n\nContext: \n'+str('\n'.join(dataset[idx][:-1])))
+			pred_file.write('\nDB: \n'+str(dataset_db[idx]))
 			pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
 
 
@@ -448,9 +447,9 @@ def run(args, optuna_callback=None):
 	global logger 
 
 	if args.model_type=="SET++":
-		log_path ='running/transformer_set++_act/'
+		log_path ='running/set++_act_db/'
 	elif args.model_type=="HIER++":
-		log_path ='running/transformer_hier++_act/'
+		log_path ='running/hier++_act_db/'
 	else:
 		print('Invalid model type')
 		raise ValueError
