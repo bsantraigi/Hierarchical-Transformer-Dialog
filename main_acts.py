@@ -279,7 +279,7 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 
 	val_epoch_freq = 3
 	for epoch in range(1, args.epochs + 1):
-		train, train_db, train_hierarchial_actvecs, train_responses, train_dialog_files = shuffle('train')
+		# train, train_db, train_hierarchial_actvecs, train_responses, train_dialog_files = shuffle('train')
 
 		epoch_start_time = time.time()
 		train_loss = train_epoch(model, epoch, args.batch_size, criterion, optimizer, scheduler)
@@ -449,7 +449,7 @@ def run(args, optuna_callback=None):
 	if args.model_type=="SET++":
 		log_path ='running/set++_act_db/'
 	elif args.model_type=="HIER++":
-		log_path ='running/hier++_act_db/'
+		log_path ='running/hier++_db_large/'
 	else:
 		print('Invalid model type')
 		raise ValueError
@@ -505,11 +505,11 @@ def run(args, optuna_callback=None):
 	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
 		
 	optimizer = torch.optim.Adam(model.parameters(), lr= 0.0001, betas=(0.9, 0.98), eps=1e-9)
-	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.98)
+	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.97)
 
 	logger.debug('\n\n\n=====>\n')
 
-	# best_val_loss_ground = load_model(model, 'checkpoint_criteria.pt')
+	#best_val_loss_ground = load_model(model, args.log_path+ 'checkpoint_criteria.pt')
 	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
