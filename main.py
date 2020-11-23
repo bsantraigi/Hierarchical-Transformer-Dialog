@@ -605,8 +605,8 @@ def run(args, optuna_callback=None):
 
 	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
 		
-	optimizer = torch.optim.Adam(model.parameters(), lr= 0.000125, betas=(0.9, 0.98), eps=1e-9)
-	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.9)
+	optimizer = torch.optim.Adam(model.parameters(), lr= 0.0001, betas=(0.9, 0.98), eps=1e-9)
+	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.98)
 
 	logger.debug('\n\n\n=====>\n')
 
@@ -618,7 +618,7 @@ def run(args, optuna_callback=None):
 		return
 
 	# best_val_loss_ground = load_model(model, args.log_path +'checkpoint_criteria.pt')
-	#_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 
