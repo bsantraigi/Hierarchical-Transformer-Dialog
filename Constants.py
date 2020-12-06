@@ -13,11 +13,21 @@ def append_or_add(dictionary, name, key):
     else:
         dictionary[name] = [key]
 
-domains = ['restaurant', 'hotel', 'attraction', 'train', 'taxi', 'hospital', 'police', 'bus', 'booking', 'general']
-functions = ['inform', 'request', 'recommend', 'book', 'select', 'sorry', 'none']
-arguments = ['pricerange', 'id', 'address', 'postcode', 'type', 'food', 'phone', 'name', 'area', 'choice', 
-             'price', 'time', 'reference', 'none', 'parking', 'stars', 'internet', 'day', 'arriveby', 'departure', 
-             'destination', 'leaveat', 'duration', 'trainid', 'people', 'department', 'stay']
+domains = ['attraction', 'booking', 'bus', 'general', 'hospital', 'hotel', 'police', 'restaurant', 'taxi', 'train']
+functions = ['book', 'inform', 'none', 'recommend', 'request', 'select', 'sorry']
+arguments = ['address', 'area', 'arriveby', 'choice', 'day', 'department', 'departure', 'destination', 'duration', 'food', 'id', 'internet', 'leaveat', 'name', 'none', 'parking', 'people', 'phone', 'postcode', 'price', 'pricerange', 'reference', 'stars', 'stay', 'time', 'trainid', 'type']
+
+
+V_domains = ['PAD', 'SOS', 'EOS']+ domains
+V_slots = ['PAD', 'SOS', 'EOS']+ arguments
+V_actions = ['PAD', 'SOS', 'EOS']+ functions
+V_domains_wtoi = dict((el,i) for i,el in enumerate(V_domains))
+V_slots_wtoi = dict((el,i) for i,el in enumerate(V_slots))
+V_actions_wtoi = dict((el,i) for i,el in enumerate(V_actions))
+
+V_domains_itow = {v:k for k,v in V_domains_wtoi.items()}
+V_slots_itow = {v:k for k,v in V_slots_wtoi.items()}
+V_actions_itow = {v:k for k,v in V_actions_wtoi.items()}
 
 used_levels = domains + functions + arguments
 #used_levels = functions + arguments

@@ -16,43 +16,66 @@ from nltk.util import ngrams
 import re, json
 from tqdm import tqdm
 
-# import spacy
-# import matplotlib.pyplot as plt
 
 from dataset import *
 from utils import *
 from model import *
+from joint_model import *
+from joint_model_v2 import *
+from joint_model_v2_2 import *
+from joint_model_v3 import *
+from joint_model_v4 import *
 from metrics import *
 from collections import OrderedDict
 from evaluate import evaluateModel
 import Constants
 import argparse
 
-
 if not os.path.isdir('running'):
 	os.makedirs('running')
 
-def split_to_files(split):
-	if split=='train':
-		return train_dialog_files
-	if split=='val':
-		return val_dialog_files
-	if split=='test':
-		return test_dialog_files
-	return None
 
-def split_to_responses(split): # return original responses
+def split_to_responses(split): # return original responses, file names
 	if split=='train':
-		return train_responses
+		return train_responses, train_dialog_files
 	if split=='val':
-		return val_responses
+		return val_responses, val_dialog_files
 	if split=='test':
-		return test_responses
+		return test_responses, test_dialog_files
 	return ValueError
+
+def get_files_joint(split): # dataset, dataset_counter, dataset_bs, dataset_da
+	if split=='train':
+		return train, train_counter, train_bs, train_dialog_act
+	if split=='val':
+		return val, val_counter, val_bs, val_dialog_act
+	if split=='test':
+		return test, test_counter, test_bs, test_dialog_act
+	return ValueError
+	
+
+def shuffle(split): # shuffle each diag_len acc of counter: 
+	dataset, dataset_counter, dataset_bs, dataset_da = get_files_joint(split)
+	dataset_responses, dataset_dialog_files = split_to_responses(split)
+	indices = range(0, len(dataset))
+	t =0
+	c = list(zip(dataset, dataset_bs, dataset_da, dataset_responses, dataset_dialog_files))
+	ans = []
+	for k,v in dataset_counter.items():# from t,t+v
+		temp = c[t:t+v]
+		random.shuffle(temp)
+		c[t:t+v]=temp
+		t += v
+	dataset, dataset_bs, dataset_da, dataset_responses, dataset_dialog_files = zip(*c)
+	return zip(*c)
 
 def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # losses per batch
 	model.train()
 	total_loss =0
+	total_response_loss =0
+	total_bs_loss =0
+	total_da_loss =0
+
 	start_time = time.time()
 	ntokens = len(idxtoword)
 	nbatches = len(train)//batch_size
@@ -60,83 +83,155 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 #     if torch.cuda.is_available():
 #         stat_cuda('before epoch')
 		
+	accumulated_steps = 3
+	optimizer.zero_grad()
 
-	for i, (data, targets, labels) in tqdm(enumerate(data_loader(train, train_counter, batch_size, wordtoidx)), total=nbatches):
+	# response_loss = torch.tensor([0], device=device)
+	# da_loss=torch.tensor([0], device=device)
+
+	for i, (data, targets, labels, bs, da) in enumerate(data_loader(train, train_counter, train_bs, train_dialog_act, batch_size, wordtoidx)):
 
 		batch_size_curr = data.shape[1]
-		optimizer.zero_grad()
-		output = model(data, targets)
+		# optimizer.zero_grad()
 
-		label_pad_mask = (labels!=0).transpose(0,1)   
-			
-		loss = criterion(output.view(-1, ntokens), labels.reshape(-1)) # prev code
-		loss.backward()
-		# # to check predicted and actual labels
-		# output_max = torch.max(output, dim=2)[1]
-		# for s in range(batch_size_curr):
-		# 	print(output_max[:, s], '\n', labels[:, s], '\n\n')
-	
-#       plot_grad_flow(model.named_parameters())
+		output, bs_logits , da_logits = model(data, bs, da, targets)
 
-		torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-		optimizer.step()
-		total_loss += loss.item()*batch_size_curr
-		# print(loss.item())
-
-		elapsed = time.time()-start_time
+		response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
+		belief_loss=criterion(bs_logits[:-1].reshape(-1, ntokens), bs[1:].reshape(-1))
+		da_loss=criterion(da_logits[:-1].reshape(-1, ntokens), da[1:].reshape(-1))  
 		
+		cur_loss = response_loss+belief_loss+da_loss
+
+		loss = cur_loss / accumulated_steps
+		loss.backward()
+	
+		torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+		
+		if i%accumulated_steps==0:
+			optimizer.step()
+			optimizer.zero_grad()
+
+		total_loss += cur_loss.item()*batch_size_curr
+		total_response_loss += response_loss.item()*batch_size_curr
+		total_bs_loss += belief_loss.item()*batch_size_curr
+		total_da_loss += da_loss.item()*batch_size_curr
+
+	elapsed = time.time()-start_time
 
 	total_loss /= len(train)
-	logger.debug('==> Epoch {}, Train \tLoss: {:0.4f}\tTime taken: {:0.1f}s'.format(epoch,  total_loss, elapsed))
+	total_response_loss /= len(train)
+	total_bs_loss /=len(train)
+	total_da_loss /= len(train)
+
+	logger.debug('==>Epoch {}, Train \tResp Loss: {:0.3f} BS Loss: {:0.3f} DA Loss: {:0.3f}\tTotal loss {:0.3f}\tTime {:0.0f}s'.format(epoch,  total_response_loss, total_bs_loss, total_da_loss, total_loss, elapsed))
 
 	return total_loss
 
 
+def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per batch
 
-
-def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split, method='beam', beam_size=None):
-#     print(len(dataset))
 	model.eval()
 	total_loss =0
-	ntokens = len(wordtoidx)
-	score=0
-	start = time.time()
+	total_response_loss =0
+	total_bs_loss =0
+	total_da_loss =0
+	start_time = time.time()
+	ntokens = len(idxtoword)
+	
+	dataset, dataset_counter, dataset_bs, dataset_da = get_files_joint(split)
 
-	logger.debug('{} search {}'.format(method, split))
+	# response_loss = torch.tensor([0], device=device)
+	# da_loss=torch.tensor([0], device=device)
+	
+	with torch.no_grad():
+		for i, (data, targets, labels, bs, da) in enumerate(data_loader(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, wordtoidx)):
+
+			batch_size_curr = data.shape[1]
+			output, bs_logits , da_logits = model(data, bs, da, targets)
+
+			response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
+			belief_loss=criterion(bs_logits[:-1].reshape(-1, ntokens), bs[1:].reshape(-1))
+			da_loss=criterion(da_logits[:-1].reshape(-1, ntokens), da[1:].reshape(-1))  
+
+			cur_loss = response_loss+belief_loss+da_loss
+
+			total_loss += cur_loss.item()*batch_size_curr
+			total_response_loss += response_loss.item()*batch_size_curr
+			total_bs_loss += belief_loss.item()*batch_size_curr
+			total_da_loss += da_loss.item()*batch_size_curr
+
+	elapsed = time.time()-start_time
+
+	total_loss /= len(dataset)
+	total_response_loss /= len(dataset)
+	total_bs_loss /=len(dataset)
+	total_da_loss /= len(dataset)
+
+	logger.debug('==>{} \tResp Loss: {:0.3f} BS Loss: {:0.3f} DA Loss: {:0.3f}\tTotal loss {:0.3f}\tTime {:0.0f}s'.format(split, total_response_loss, total_bs_loss, total_da_loss, total_loss, elapsed))
+
+	return total_loss
+
+
+def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , batch_size, criterion, split, method='beam', beam_size=None):
+	batch_size = args.batch_size
+	use_gt = True
+
+	logger.debug('=========== {} search {} ==========='.format(method.upper(), split.upper()))
 	if method=='beam':
 		logger.debug('Beam size {}'.format(beam_size))
+	if use_gt:
+		logger.debug('Using ground truth bs while inference')
+	model.eval()
+	total_loss =0
+	total_bs_loss=0
+	total_da_loss=0
+	total_response_loss=0
 
-	# .module. if using dataparallel
+	start = time.time()
+	nbatches = len(dataset)//batch_size
+
+	response_loss = torch.tensor([0], device=device)
+	da_loss=torch.tensor([0], device=device)
+
 	with torch.no_grad():
-		for i, (data, targets, labels) in tqdm(enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)), total=len(dataset)//batch_size):
+		for i, (data, targets, labels, bs, da) in enumerate(data_loader(dataset,dataset_counter, dataset_bs, dataset_da , batch_size, wordtoidx)): # , total=len(dataset)//batch_size):
 
 			batch_size_curr = targets.shape[1]
 
 			if method=='beam':
 				if isinstance(model, nn.DataParallel):
-					output = model.module.translate_batch(data,  beam_size , batch_size_curr)
+					# gives list of sentences itself
+					bs_output, da_output = model.module.greedy_search_bsda(data, bs, None,  batch_size_curr, use_gt=use_gt)
+					output = model.module.translate_batch(data, bs_output, da_output, beam_size, batch_size_curr)
 				else:
-					output = model.translate_batch(data, beam_size, batch_size_curr) #gives list of sentences itself
+					bs_output, da_output = model.greedy_search_bsda(data, bs, None, batch_size_curr, use_gt =use_gt)
+					output = model.translate_batch(data, bs_output, da_output, beam_size , batch_size_curr)
+
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
-					output = model.module.greedy_search(data, batch_size_curr)
-				else:
-					output = model.greedy_search(data, batch_size_curr) 
-
-
-			label_pad_mask = labels.transpose(0,1)!=0
-			
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da, use_gt = use_gt) # .module. if using dataparallel
+				else: # da_output_i in individal vocab indices
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da, use_gt= use_gt)
 
 			if torch.is_tensor(output): # greedy search
-				cur_loss = criterion(output.view(-1, ntokens), labels.reshape(-1)).item()*batch_size_curr
-				total_loss += cur_loss
+				# print(bs_logits.shape, bs.shape) - torch.Size([49, 32, 1515]) torch.Size([50, 32])
+				bs_loss = criterion(bs_logits.reshape(-1, ntokens), bs[1:].reshape(-1)) 
 
-				output = torch.max(output, dim=2)[1] # msl, batchsize
-				# for s in range(batch_size_curr):
-				# 	print(output[:, s],'\n', labels[:, s], '\n\n')
-				# exit()
+				da_loss = criterion(da_logits.reshape(-1, ntokens), da[1:].reshape(-1))
+				response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
-				output_max = post_process(output.transpose(0,1))				
+				cur_loss = (response_loss+bs_loss+da_loss)
+				# cur_loss = bs_loss
+
+				total_response_loss += response_loss.item() * batch_size_curr
+				total_bs_loss += bs_loss.item() * batch_size_curr
+				total_da_loss += da_loss.item() * batch_size_curr
+
+				total_loss += cur_loss.item() * batch_size_curr
+
+				# output = torch.max(output, dim=2)[1]
+				output_max = post_process(output_max.transpose(0,1))
+				
 				if i==0:
 					hyp = output_max
 					ref = targets.transpose(0,1)
@@ -151,31 +246,42 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 					hyp.extend([torch.tensor(l) for l in output])
 					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
 
+			if i==0: #both greedy,beam
+				bs_pred = bs_output.transpose(0,1) # bs, 50 - with sos
+				bs_act = bs.transpose(0,1) #bs,50
+				da_pred = da_output.transpose(0,1) # bs, 51
+				da_act = da.transpose(0,1)
+			else:
+				bs_pred= torch.cat([bs_pred, bs_output.transpose(0,1)])
+				bs_act = torch.cat([bs_act, bs.transpose(0,1)])
+				da_pred=torch.cat([da_pred, da_output.transpose(0,1)])# bs, 51
+				da_act=torch.cat([da_act, da.transpose(0,1)])
+
+
+		"""
+		bs_pred.shape - bs, 50 - with sos
+		bs_act[0].shape, bs_act[1].shape = bs, 25 -> changed to bs,50 below
+		in metrics such as accuracy, exlcude sos, eos, pad
+		both bs_pred, bs_act in total vocab indices now
+		"""
+
+		bs_joint_acc, bs_slot_acc = compute_bs_accuracy(bs_pred, bs_act)
+		da_acc, da_hdsa_metrics = compute_da_metrics(da_pred, da_act)
+
 		indices = list(range(0, len(dataset)))
-		# indices = list(range(0, batch_size)) #uncomment this to run for one batch
+		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
 
-		pred_hyp = tensor_to_sents(hyp, wordtoidx)
-		pred_ref = split_to_responses(split)
-		# pred_ref = split_to_responses(split)[:args.batch_size] # uncomment for 1 batch
+		pred_hyp = tensor_to_sents(hyp , wordtoidx)  # hyp[indices]
+		pred_ref, all_dialog_files = split_to_responses(split)
+		
+		bleu_score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
+		f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
 
-
-		# # calculation for bleu scores of different context lengths
-		# limit_small = len(dataset)//3 
-		# limit_med = 2*len(dataset)//3 
-		# score_small = BLEU_calc.score(hyp[:limit_small], ref[:limit_small], wordtoidx) * 100
-		# score_medium = BLEU_calc.score(hyp[limit_small:limit_med], ref[limit_small:limit_med], wordtoidx)* 100
-		# score_large = BLEU_calc.score(hyp[limit_med:], ref[limit_med:], wordtoidx)* 100
-
-		# logger.debug('BLEU Scores for different buckets: ')
-		# logger.debug('Small: {} \tMedium: {}\tLarge: {}'.format(score_small, score_medium, score_large))
-
-
-		# using pred_hyp, pred_trg as using all dataset as indices, else use hyp,ref
-		score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx) * 100
-		f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx) * 100
 		total_loss = total_loss/len(dataset)
+		total_response_loss = total_response_loss/len(dataset)
+		total_bs_loss = total_bs_loss/len(dataset)
+		total_da_loss = total_da_loss/len(dataset)
 
-		data, _, all_dialog_files = name_to_dataset(split)
 		evaluate_dials = {}
 		for i, h in enumerate(pred_hyp):
 			if all_dialog_files[i] in evaluate_dials:
@@ -191,7 +297,23 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 		with open(model_turns_file, 'w') as f:
 			json.dump(evaluate_dials, f)
 		
+		# Save model predictions to json also for later evaluation
+		if method=='beam':
+			model_turns_file = args.log_path+'model_turns_beam_'+str(beam_size)+'_'+split+'.json'
+		elif method=='greedy':
+			model_turns_file = args.log_path+'model_turns_greedy_'+split+'.json'
+		with open(model_turns_file, 'w') as f:
+			json.dump(evaluate_dials, f)
+
 		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
+		
+		data, _, _, _ = get_files_joint(split)
+
+		# decode in individual vocabs
+		bs_pred = tensor_to_sents(bs_pred, wordtoidx)
+		bs_act = tensor_to_sents(bs_act, wordtoidx)
+		da_pred = tensor_to_sents(da_pred, wordtoidx)
+		da_act = tensor_to_sents(da_act, wordtoidx)
 
 		if method=='beam':
 			pred_file = open(args.log_path+'pred_beam_'+str(beam_size)+'_'+split+'.txt', 'w')
@@ -199,116 +321,85 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 			pred_file = open(args.log_path+'pred_greedy_'+split+'.txt', 'w')
 
 		pred_file.write('\n\n***'+split+'***')
-		for idx, h, r in zip(indices, pred_hyp, pred_ref):
+		for idx, bs_t, bs_p, da_t, da_p, h, r in zip(indices, bs_act, bs_pred, da_act, da_pred, pred_hyp, pred_ref): 
 			pred_file.write('\n\nContext: \n'+str('\n'.join(data[idx][:-1])))
+			pred_file.write('\nBS Gold: '+str(bs_t)+'\nBS Pred: '+str(bs_p))
+			pred_file.write('\nDA Gold: '+str(da_t)+'\nDA Pred: '+str(da_p))
 			pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
-		
 
-	elapsed = time.time()-start
-	criteria = score+0.5*(matches+successes)
-	logger.debug('==> {} \tLoss: {:0.4f}\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}\tCriteria: {:0.3f}\tTime taken: {:0.1f}s'.format( split, total_loss, score, f1_entity, matches, successes, criteria, elapsed))
-	return total_loss, score, f1_entity, matches, successes
+	elapsed = time.time()-start	
+	if method=='greedy':
+		logger.debug('==>{}\tResp Loss: {:0.3f}\tBS Loss: {:0.3f}\tDA Loss: {:0.3f}\tTotal Loss: {:0.3f}\tTime taken: {:0.1f}s'.format(split,  total_response_loss, total_bs_loss, total_da_loss, total_loss, elapsed))
 
+	logger.debug('==>{}\tBelief state Joint acc: {:0.2f}\tSlot acc: {:0.2f}'.format(split,  bs_joint_acc, bs_slot_acc))
 
+	logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f}'.format(split, da_acc[0], da_acc[1]))
+	# logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f} || HDSA precision: {:0.2f}  recall {:0.2f}  f1_score: {:0.2f}'.format(split, da_acc[0], da_acc[1], da_hdsa_metrics[0], da_hdsa_metrics[1], da_hdsa_metrics[2]))
 
-def get_loss_nograd(model, epoch, batch_size, criterion, split): # losses per batch
-	model.eval()
-	total_loss =0
-	start_time = time.time()
-	ntokens = len(idxtoword)
-	
-	dataset, dataset_counter, _ = name_to_dataset(split)	
-	
-	with torch.no_grad():
-		for i, (data, targets, labels) in enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)):
-			batch_size_curr = data.shape[1]
-			output = model(data, targets)
-			label_pad_mask = (labels!=0).transpose(0,1)   			
-			loss = criterion(output.view(-1, ntokens), labels.reshape(-1)) 
-			total_loss += loss.item()*batch_size_curr
+	criteria = bleu_score+0.5*(matches+successes)
+	logger.debug('==>{}\tBleu: {:0.2f}\tF1-Entity {:0.2f}\tInform {:0.2f}\tSuccesses: {:0.2f}\tCriteria: {:0.2f}'.format( split, bleu_score, f1_entity, matches, successes, criteria ))
 
-		elapsed = time.time()-start_time
-
-	total_loss /= len(dataset)
-	logger.debug('{} \tLoss(using ground truths): {:0.7f}\tTime taken: {:0.1f}s'.format(split, total_loss, elapsed))
-	return total_loss
+	return total_loss, bleu_score, f1_entity, matches, successes
 
 
 # stat_cuda('before training')
 def training(model, args, criterion, optimizer, scheduler, optuna_callback=None):
-	# global best_val_bleu, criteria, best_val_loss_ground
-
+	global best_val_bleu, criteria, best_val_loss_ground
+	global train, train_counter, train_bs, train_dialog_act, train_responses, train_dialog_files
 	best_model = None
 	train_losses = []
 	val_losses = []
-
-	# if best_val_loss_ground==None: #if not set outside, initialise again
-	# 	best_val_loss_ground=float("inf")
-	# 	best_val_bleu=-float("inf")
-	# 	criteria=-float("inf")
+	val_bleus = []
 
 	best_val_loss_ground=float("inf")
 	best_val_bleu=-float("inf")
 	best_criteria=-float("inf")
 
-	logger.debug('Best val loss ground at begin of training: {:0.7f}'.format(best_val_loss_ground))
+	logger.debug('At begin of training, Best val loss ground : {:0.7f} Best bleu: {:0.4f}, Best criteria: {:0.4f}'.format(best_val_loss_ground, best_val_bleu, best_criteria))
 	logger.debug('====> STARTING TRAINING NOW')
-	val_epoch_freq=3
-	
+
+	val_epoch_freq = 3
 	for epoch in range(1, args.epochs + 1):
+		train, train_bs, train_dialog_act, train_responses, train_dialog_files = shuffle('train')
 		epoch_start_time = time.time()
 		train_loss = train_epoch(model, epoch, args.batch_size, criterion, optimizer, scheduler)
 
 		val_loss_ground = get_loss_nograd(model, epoch, args.batch_size, criterion, 'val')
-
-		train_losses.append(train_loss)
-		val_losses.append(val_loss_ground)
-
-		if val_loss_ground < best_val_loss_ground:
-			best_val_loss_ground = val_loss_ground
-			logger.debug('==> New optimum found wrt val loss')
+		
+		if val_loss_ground <= best_val_loss_ground:
+			best_val_loss_ground=val_loss_ground
 			save_model(model, args, 'checkpoint_bestloss.pt',train_loss, val_loss_ground, -1)
+		else:
+			scheduler.step()
 
+		if epoch < 8:
+			save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
+			continue
 
-		# for every 3 epochs, evaluate the metrics
+		# for every "val_epoch_freq" epochs, evaluate the metrics
 		if epoch%val_epoch_freq!=0:
 			save_model(model, args, 'checkpoint.pt', train_loss, val_loss_ground, -1)
 			continue
 
-		val_loss, val_bleu, val_f1entity, matches, successes = evaluate(model,args, val, val_counter, args.batch_size, criterion, 'val', 'greedy')
+		_, val_bleu, val_f1entity, matches, successes = evaluate(model, args, val, val_counter, val_bs, val_dialog_act , args.batch_size, criterion, 'val', method='greedy')
 		val_criteria = val_bleu+0.5*matches+0.5*successes
 
 		if optuna_callback is not None:
 			optuna_callback(epoch/val_epoch_freq, val_criteria) # Pass the score metric on validation set here.
 		
-		if val_bleu > best_val_bleu:
-			best_val_bleu = val_bleu
-			logger.debug('==> New optimum found wrt val bleu')
-			save_model(model, args, 'checkpoint_bestbleu.pt',train_loss,val_loss_ground, val_bleu)
-		
-		if val_criteria > best_criteria:
-			best_criteria =  val_criteria
+		if  val_criteria > best_criteria:
+			best_criteria = val_criteria
 			best_model = model
 			logger.debug('==> New optimum found wrt val criteria')
-			save_model(model, args, 'checkpoint_criteria.pt',train_loss, val_loss_ground, val_bleu)
+			save_model(model, args, 'checkpoint_criteria.pt',train_loss, val_loss_ground, val_criteria)
 
-		save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, val_bleu)
-
+		save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, val_criteria)
 		scheduler.step()
-
-
-	# Plot training and validation loss
-	# param_range = np.arange(1, epochs+1, 1)
-	# plt.plot(param_range, train_losses, label="Training loss", color="black")
-	# plt.plot(param_range, val_losses, label="Cross-validation loss", color="green")
-	# plt.show()
-
+	
 	return best_model
 
 
-
-
-def save_model(model, args, name, train_loss, val_loss, val_bleu):
+def save_model(model, args, name, train_loss, val_loss, val_criteria):
 	checkpoint = {
 					'model': model.state_dict(),
 					'embedding_size': args.embedding_size,
@@ -317,24 +408,23 @@ def save_model(model, args, name, train_loss, val_loss, val_bleu):
 					'nlayers_e1': args.nlayers_e1,
 					'nlayers_e2': args.nlayers_e2,
 					'nlayers_d': args.nlayers_d,
-					'dropout': args.dropout				 }
-
+					'dropout': args.dropout
+				 }
 	if train_loss!=-1:
 		checkpoint['train_loss']=train_loss
 	if val_loss!=-1:
 		checkpoint['val_loss']=val_loss
-	if val_bleu!=-1:
-		checkpoint['val_bleu']=val_bleu
+	if val_criteria!=-1:
+		checkpoint['val_criteria']=val_criteria
 
-	logger.debug('==> Checkpointing everything now...in {}'.format(name))
+	# logger.debug('==> Checkpointing everything now...in {}'.format(name))
 	torch.save(checkpoint, args.log_path+name)
 
 
-
 def load_model(model, checkpoint='checkpoint.pt'):
-	global best_val_bleu, best_val_loss_ground, criteria
 	load_file = checkpoint
 	if os.path.isfile(load_file):
+		global best_val_bleu, best_val_loss_ground, criteria
 		try:
 			print('Reloading previous checkpoint', load_file)
 
@@ -354,65 +444,108 @@ def load_model(model, checkpoint='checkpoint.pt'):
 			else:
 				checkpoint = torch.load(load_file)
 				model.load_state_dict(checkpoint['model'])
-				# optimizer.load_state_dict(checkpoint['optim'])
+			#	optimizer.load_state_dict(checkpoint['optim'])
 
+			
 			if(checkpoint.get('val_loss')):
-				best_val_loss_ground = checkpoint.get('val_loss')
-			else:
-				best_val_loss_ground= get_loss_nograd(model, 0, args.batch_size, 'val')
+				best_val_loss_ground = checkpoint['val_loss']
+			# else:
+				# best_val_loss_ground= get_loss_nograd(model, 0, args.batch_size, criterion, 'val')
+				
 
-			if(checkpoint.get('val_bleu')):
-				best_val_bleu = checkpoint.get('val_bleu')
-				logger.debug('Valid bleu of Loaded model is: {:0.4f}'.format(best_val_bleu))
+			if(checkpoint.get('val_criteria')):
+				best_val_bleu = checkpoint.get('val_criteria')
+				logger.debug('Valid criteria of Loaded model is: {:0.4f}'.format(best_val_bleu))
 
 			logger.debug('Loaded model, Val loss(ground): {:0.8f}'.format(best_val_loss_ground))
-
 		except Exception as e:
-			print('Loading model error')
-			print(e)
+			logger.debug('Loading model error')
+			logger.debug(e)
 	else:
-		print('No model to load')
-
-
-
-def name_to_dataset(split):
-	if split=='train':
-		return train, train_counter, train_dialog_files
-	if split=='val':
-		return val, val_counter, val_dialog_files
-	if split=='test':
-		return test, test_counter, test_dialog_files
-	print('Error')
+		best_val_loss_ground = float('inf')
+		logger.debug('No model to load')
+	return best_val_loss_ground
 
 
 
 def testing(model, args, criterion, split, method):
-	data, dataset_counter, _ = name_to_dataset(split)
-	test_loss, test_bleu, test_f1entity, matches, successes = evaluate(model, args, data, dataset_counter, args.batch_size, criterion, split, method)
-	return test_loss, test_bleu, test_f1entity, matches, successes
+	data, dataset_counter, dataset_bs, dataset_da = get_files_joint(split)
+	if method =='greedy':
+		return evaluate(model, args, data,dataset_counter, dataset_bs, dataset_da , args.batch_size, criterion, split, method='greedy')
+	elif method=='beam':
+		return evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da  , args.batch_size, criterion, split, method='beam')
+
 
 def test_split(split, model, args, criterion):
-	data, dataset_counter, _ = name_to_dataset(split)
+	data, dataset_counter,  dataset_bs, dataset_da = get_files_joint(split)
 	# greedy
-	evaluate(model, args, data, dataset_counter, args.batch_size, criterion, split, 'greedy')
+	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'greedy')
 	# beam 2
-	evaluate(model, args, data, dataset_counter, args.batch_size, criterion, split, 'beam', 2)
+	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 2)
 	# beam 3
-	evaluate(model, args, data, dataset_counter, args.batch_size, criterion, split, 'beam', 3)
-	# beam 5
-	evaluate(model, args, data, dataset_counter, args.batch_size, criterion, split, 'beam', 5)
+	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 3)
+	# # beam 5
+	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 5)
 	
+
+
+# global logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+formatter = logging.Formatter("[%(asctime)s]:%(message)s")
+
+
+train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = gen_dataset_joint('train')
+val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses = gen_dataset_joint('val')
+test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses =gen_dataset_joint('test')
+
+# print(val[0])
+# val, val_bs, val_dialog_act, val_responses, val_dialog_files = shuffle( 'val')
+# print("******************************************************")
+# print(val[0])
+# exit()
+
+max_sent_len = 50
+
+idxtoword, wordtoidx = build_vocab_freqbased(load=False)
+vocab_size = len(idxtoword)
+
+print('length of vocab: ', vocab_size)
+# print(idxtoword)
+
+ntokens=len(wordtoidx)
+
+BLEU_calc = BLEUScorer() 
+F1_calc = F1Scorer()
+# Use these in evaluation - to convert predictions to total vocab
+d_to_imap = {}
+s_to_imap = {}
+a_to_imap = {}
+for w, v in Constants.V_domains_wtoi.items():
+	d_to_imap[v]=wordtoidx[w]
+for w, v in Constants.V_slots_wtoi.items():
+	s_to_imap[v]=wordtoidx[w]
+for w, v in Constants.V_actions_wtoi.items():
+	a_to_imap[v]=wordtoidx[w]
 
 
 def run(args, optuna_callback=None):
 	global logger 
 
-	if args.model_type=="SET":
-		log_path ='running/transformer_set/'
-	elif args.model_type=="HIER":
-		log_path ='running/transformer_hier/'
-	elif args.model_type=="MAT":
-		log_path ='running/transformer_mat/'
+	if args.log_path!="notset":
+		log_path = args.log_path
+	elif args.model_type=="action_pred":
+		log_path ='running/action_pred/'
+	elif args.model_type=="joint":
+		log_path ='running/joint_simple/'
+	elif args.model_type=="joint_v2":
+		log_path ='running/joint_v2/'
+	elif args.model_type=="joint_v2_2":
+		log_path ='running/joint_v2_2/'
+	elif args.model_type=="joint_v3":
+		log_path ='running/joint_v3/'
+	elif args.model_type=="joint_v4":
+		log_path ='running/joint_v4/'
 	else:
 		print('Invalid model type')
 		raise ValueError
@@ -439,7 +572,6 @@ def run(args, optuna_callback=None):
 
 	os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
-
 	# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") # for single device
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	print(device)
@@ -447,15 +579,27 @@ def run(args, optuna_callback=None):
 	
 	max_sent_len = 50
 
-	ntokens=len(wordtoidx)
-	
-	model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
-
-	criterion = nn.CrossEntropyLoss(ignore_index=0)
+	if args.model_type=="action_pred":
+		model = Action_predictor(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.dropout)
+		criterion = nn.BCELoss()
+	elif args.model_type=="joint":
+		model = Joint_model(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
+		criterion = nn.CrossEntropyLoss(ignore_index=0)
+	elif args.model_type=="joint_v2":
+		model = Joint_model_v2(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
+		criterion = nn.CrossEntropyLoss(ignore_index=0)
+	elif args.model_type=="joint_v2_2":
+		model = Joint_model_v2_2(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
+		criterion = nn.CrossEntropyLoss(ignore_index=0)
+	elif args.model_type=="joint_v3":
+		model = Joint_model_v3(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
+		criterion = nn.CrossEntropyLoss(ignore_index=0)
+	elif args.model_type=="joint_v4":
+		model = Joint_model_v4(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
+		criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 	seed = 123
 	torch.manual_seed(seed)
-
 
 	if torch.cuda.is_available():
 		torch.cuda.manual_seed(seed)
@@ -468,74 +612,47 @@ def run(args, optuna_callback=None):
 		criterion.to(device)
 
 	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
+		
+	optimizer = torch.optim.Adam(model.parameters(), lr= 0.000125, betas=(0.9, 0.98), eps=1e-9)
+	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.9)
 
-	
-	optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
-	scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.98)
-	
 	logger.debug('\n\n\n=====>\n')
 
 	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
-	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
-	method = 'greedy'
-	logger.debug('Testing model {}\n'.format(method))
-
-
+	logger.debug('Testing model\n')
 	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	# logger.debug('==>Test\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}'.format(test_bleu, test_f1, test_matches, test_successes))
-	# logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+	# logger.debug('Test critiera: {:0.3f}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
-	# # To get greedy, beam(2,3,5) scores for val, test 
+	# To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)
-	test_split('test', model, args, criterion)
+	# test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
-	return val_bleu+0.5*(val_matches+val_successes)
+	val_criteria = val_bleu+0.5*(val_matches+val_successes)
+	return val_criteria
 
 
-# global logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
+if __name__ == '__main__':
+	parser = argparse.ArgumentParser() 
 
-
-train, train_counter, _ , train_dialog_files, train_responses  = gen_dataset_with_acts('train')
-val, val_counter, _, val_dialog_files, val_responses = gen_dataset_with_acts('val')
-test, test_counter, _ , test_dialog_files, test_responses = gen_dataset_with_acts('test')
-
-# top 1500 words
-idxtoword, wordtoidx = build_vocab_freqbased(load=False)
-vocab_size = len(idxtoword)
-ntokens = vocab_size
-# print(wordtoidx)
-print('length of vocab: ', vocab_size)
-
-BLEU_calc = BLEUScorer() 
-F1_calc = F1Scorer()
-
-
-
-if __name__ == "__main__":
-	parser = argparse.ArgumentParser()
-
-	parser.add_argument("-embed", "--embedding_size", default=100, type=int, help = "Give embedding size")
+	parser.add_argument("-embed", "--embedding_size", default=160, type=int, help = "Give embedding size")
 	parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads")
-	parser.add_argument("-hid", "--nhid", default=100, type=int,  help = "Give hidden size")
+	parser.add_argument("-hid", "--nhid", default=160, type=int,  help = "Give hidden size")
 
 	parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1")
 	parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2")
 	parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
 
 	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
-	parser.add_argument("-bs", "--batch_size", default=32 , type=int, help = "Give batch size")
+	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
 	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
-	parser.add_argument("-model", "--model_type", default="HIER", help="Give model name one of [SET, HIER, MAT]")
+	parser.add_argument("-lr", "--learning_rate",default=0.0001, type=float, help = "Give learning rate")
+	parser.add_argument("-model", "--model_type", default="joint_v2", help="Give model name one of [joint, joint_v2, joint_v2_2, joint_v3, joint_v4, action_pred]")
+	parser.add_argument("-log_path", "--log_path", default="notset", help="Give log path name")
 
-	args = parser.parse_args() 
-	
+	args = parser.parse_args()
 	run(args)
 
-	# model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
-	# best_val_loss_ground = load_model(model, '../transformers/running/transformer_dyn_hdsaslide_1/checkpoint.pt')
