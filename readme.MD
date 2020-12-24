@@ -1,4 +1,13 @@
 
+### To do
+**Bpe_nondelex**
+main.py runs the joint model. 
+1. make adjustments to run the nondelex setting from main_acts.py
+2. dataset.py to use joint model things
+3. makes changes in dataset.py to use values also
+4. d_to_imap stuff? neeeded?
+
+
 ### DATASET: (From https://github.com/wenhuchen/HDSA-Dialog)
 
 generated using create_delex_data.py in original multiwoz repository for multiwoz 2.1 version. <br>
@@ -40,8 +49,6 @@ Run python main.py
 
 HDSA Dialog action prediction(model code in model.py)
 python main.py -model_type action_pred
-
-
 
 
 
