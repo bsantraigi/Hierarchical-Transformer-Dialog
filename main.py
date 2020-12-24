@@ -511,9 +511,9 @@ logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(asctime)s]:%(message)s")
 
 
-train,train_counter,train_hierarchial_actvecs,train_dialog_files, train_responses = gen_dataset_with_acts('train', non_delex=args.non_delex)
-val, val_counter, val_hierarchial_actvecs, val_dialog_files, val_responses = gen_dataset_with_acts('val', non_delex=args.non_delex)
-test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses =gen_dataset_with_acts('test', non_delex=args.non_delex)
+train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = gen_dataset_joint('train', non_delex=args.non_delex)
+val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses = gen_dataset_joint('val', non_delex=args.non_delex)
+test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses =gen_dataset_joint('test', non_delex=args.non_delex)
 
 # print(val[0])
 # val, val_bs, val_dialog_act, val_responses, val_dialog_files = shuffle( 'val')

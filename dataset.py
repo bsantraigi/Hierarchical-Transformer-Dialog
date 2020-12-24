@@ -88,11 +88,88 @@ def gen_dataset_with_acts(split_name, non_delex=False): # [ no of turns , src, t
 	return all_data, c, all_hierarchial_act_vecs, all_dialog_files, true_responses
 
 
-def get_dataset_joint(split): #to do
-	data_dir = '../'
-	assert split=='train' or split=='val' or split== 'test'
-	file_name = data_dir + str(split) + '_dials.json'
 
+def gen_dataset_joint(split_name): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
+	file_path = 'hdsa_data/hdsa_data/'
+	data_dir = 'data'
+	dataset_file = open(file_path+split_name+'.json', 'r')
+	dataset = json.load(dataset_file)
+	
+	data = []
+	max_sent_len = 48
+	MBS=51 # belief state text input len
+	MDA=52 # dialog act text input len
+	responses = []
+	''' 
+		# RESULTS - Train, valid, test
+		max_bs_triplets:  13 max_act_triplets:  10
+		max_bs_triplets:  12 max_act_triplets:  10
+		max_bs_triplets:  12 max_act_triplets:  10
+	'''
+	max_act_triplets =0
+	max_bs_triplets =0
+
+	for x in dataset:
+		dialog_file = x['file']
+
+		src = []
+		
+		for turn_num, turn in enumerate(x['info']):
+			user= 'SOS '+' '.join(turn['user'].lower().strip().split()[:max_sent_len])+' EOS' 
+			sys = 'SOS '+' '.join(turn['sys'].lower().strip().split()[:max_sent_len])+' EOS'
+
+			src.append(user)
+
+			bs_list=[]
+			bs = 'SOS '
+			for domain, v_all in turn['BS'].items():# v_all is list of [slot_name, value] for that domain
+				for v in v_all:
+					# domain, slot_name1, domain, slot_name2,..
+					bs_list.append([domain, v[0].lower()])
+
+			bs_list = sorted(bs_list) # sort in alphabetical according to domain first, then by slot
+			for ele in bs_list:
+				bs += ele[0] + " " + ele[1] + " "
+
+			bs += ' EOS '			
+			bs = bs + (MBS -len(bs.split()))*' PAD'
+			# In bs.split()- domains - bs[::2], slots-bs[1::2]
+			
+			# === use turn['KB'] # TODO
+
+			dialog_act_list=[]
+			dialog_act = 'SOS '
+			if turn['act'] != "None":
+				for w in turn['act']:
+					d, f, s = w.split('-')
+					dialog_act_list.append([d,f,s])
+
+			dialog_act_list = sorted(dialog_act_list) # sort in alphabetical according to domain first, then by action, then by slot
+
+			for da in dialog_act_list:
+				dialog_act +=  ' '.join(da) + " "
+			dialog_act += ' EOS '
+			dialog_act = dialog_act + (MDA-len(dialog_act.split()))*' PAD'
+
+			context = src
+			true_response = ('SOS '+' '.join(turn['sys'].lower().strip().split())+' EOS')
+			data.append([turn_num, src[:(2*turn_num+1)], [sys], bs, dialog_act, dialog_file, true_response])
+
+			src.append(sys)
+
+	print('Length of', split_name,' dataset is', len(data))
+
+	data.sort(key=lambda x:x[0]) # Sort by len
+	c=Counter()
+	c.update([len(x[1])+len(x[2]) for x in data])
+	
+	all_data = [x[1]+x[2] for x in data]
+	all_bs = [f[3] for f in data]
+	all_dialog_act = [f[4] for f in data]
+	all_dialog_files = [f[5] for f in data]
+	true_responses = [f[6] for f in data]
+	
+	return all_data, c, all_bs, all_dialog_act, all_dialog_files, true_responses
 
 
 def build_vocab(train, load):
