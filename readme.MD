@@ -2,10 +2,10 @@
 ### To do
 **Bpe_nondelex**
 main.py runs the joint model. 
-1. make adjustments to run the nondelex setting from main_acts.py
-2. dataset.py to use joint model things
-3. makes changes in dataset.py to use values also
-4. d_to_imap stuff? neeeded?
+1. make adjustments to run the nondelex setting from main_acts.py - DONE
+2. dataset.py - use bs values
+3. d_to_imap stuff? neeeded?
+4. Change data_loader in utils.py
 
 
 ### DATASET: (From https://github.com/wenhuchen/HDSA-Dialog)
@@ -44,8 +44,11 @@ Number of heads in each encoder/decoder
 
 ### Reproducability:
 
-For Joint model:(model code in joint_model.py)
-Run python main.py
+For only response generation with da as input, run:
+python main_acts.py
+
+For Joint model:(model code in joint_model.py, joint_model_v2.py), run:
+python main.py
 
 HDSA Dialog action prediction(model code in model.py)
 python main.py -model_type action_pred
