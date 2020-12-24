@@ -56,58 +56,59 @@ def Rand(start, end, num):
         res.append(random.randint(start, end))   
     return res 
 
-
-# class batch from annotated transformer
-
-def data_gen(dataset, batch_size, i, wordtoidx):
+# class batch from annotated transformer with acts
+def data_gen(dataset, dataset_bs, dataset_da, batch_size, i, wordtoidx):
     # print(i, len(dataset))
     max_dial_len = len(dataset[i])-1
-#     upper_bound = min(i+batch_size, len(dataset))
+
     upper_bound = i+batch_size
-    vectorised_seq = []
+    tokenized_seq = []
+    tokenized_bs = []
+    tokenized_da = []
 
-    for d in dataset[i:upper_bound]:
+    for d, bs, da in zip(dataset[i:upper_bound], dataset_bs[i:upper_bound], dataset_da[i:upper_bound]):
 #         print(len(d), end=' ')
-        vectorised_seq.append([[wordtoidx.get(word, 1) for word in tokenize_en(sent)] for sent in d])
+        vectorised_seq.append([tokenizer.encode(sent).ids[:max_sent_len] for sent in d])
+        # tokenized_bs.append([wordtoidx.get(word, 1) for word in tokenize_en(bs)[:-1]])
+        tokenized_bs.append(tokenizer.encode(bs).ids[:-1])
+        # tokenized_da.append([wordtoidx.get(word, 1) for word in tokenize_en(da)[:-1]])
+        tokenized_da.append(tokenizer.encode(da).ids[:-1])
 
-    seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in vectorised_seq])
+    seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in tokenized_seq])
     seq_tensor = torch.zeros(batch_size, max_dial_len, max_sent_len, device=device)
 
     target_tensor = torch.zeros(batch_size, max_sent_len, device=device)
     label_tensor = torch.zeros(batch_size, max_sent_len, device=device)
 
-    for idx,(seq, seqlen) in enumerate(zip(vectorised_seq, seq_lengths)):
+    bs_tensor = torch.tensor(tokenized_bs, device=device).transpose(0,1) # 50, batch_size
+    da_tensor = torch.tensor(tokenized_da, device=device).transpose(0,1) # 51, batch_size
+
+    for idx,(seq, seqlen) in enumerate(zip(tokenized_seq, seq_lengths)):
         for i in range(seqlen-1):
             seq_tensor[idx, i, :len(seq[i])] = torch.LongTensor(seq[i])
-        target_tensor[idx, :len(seq[seqlen-1])] = torch.LongTensor(seq[seqlen-1]) # last sentence in dialog
-        label_tensor[idx, :len(seq[seqlen-1])-1] = torch.LongTensor(seq[seqlen-1][1:]) # last sentence in dialog from first word
-    # changing labels to have SOS now, [1:]
+        # last sentence in dialog
+        target_tensor[idx, :len(seq[seqlen-1])] = torch.LongTensor(seq[seqlen-1]) 
+        # last sentence in dialog from first word, ie without sos
+        label_tensor[idx, :len(seq[seqlen-1])-1] = torch.LongTensor(seq[seqlen-1][1:]) 
     
     seq_tensor = seq_tensor.transpose(1,2).reshape(batch_size, -1).transpose(0,1)
     # seq_tensor - (msl*mdl , bs)
-
     target_tensor = target_tensor.transpose(0,1)
     label_tensor = label_tensor.transpose(0,1)
 
-#     print(seq_tensor.size(), target_tensor.size())
-    
-    return seq_tensor.long(), target_tensor.long(), label_tensor.long()
+    return seq_tensor.long(), target_tensor.long(), label_tensor.long(), bs_tensor.long(), da_tensor.long()
 
 
-
-def data_loader(dataset, dataset_counter, batch_size, wordtoidx): 
+def data_loader(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, tokenizer): 
     # return batches according to dialog len, -> all similar at once
     # do mask also for these
     prev=0
     for dial_len, val in dataset_counter.items():
-    #    if val<2:
-    #        continue
         for i in range(prev, prev+val, batch_size):
 #             print(i, min(batch_size, prev+val-i))
-            yield data_gen(dataset,min(batch_size, prev+val-i), i, wordtoidx)
-        #     break #uncomment both break statements to run for one batch
+            yield data_gen(dataset, dataset_bs, dataset_da, min(batch_size, prev+val-i), i, tokenizer)
+        #     break # uncomment both break to run 1 batch for SET++,HIER++,joint models
         # break
-
         prev += val
 
 
@@ -144,7 +145,6 @@ def data_gen_acts(dataset, act_vecs, batch_size, i, tokenizer):
     batch_actvecs = batch_actvecs.transpose(0,1)
 
     # print(batch_actvecs.shape)
-    
     return seq_tensor.long(), target_tensor.long(), label_tensor.long(), batch_actvecs.float()
 
 
