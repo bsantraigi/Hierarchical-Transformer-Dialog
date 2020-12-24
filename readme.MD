@@ -1,8 +1,7 @@
 
 ### To do
 **Bpe_nondelex** </br>
-main.py runs the joint model.  </br>
-make adjustments to run the nondelex setting from main_acts.py - DONE </br>
+make adjustments to run the nondelex setting in main.py from main_acts.py - DONE </br>
 1. dataset.py - use bs values
 2. tokenization - random chars in tokens - check
 </br>Later: </br>
