@@ -69,10 +69,8 @@ def data_gen(dataset, dataset_bs, dataset_da, batch_size, i, wordtoidx):
     for d, bs, da in zip(dataset[i:upper_bound], dataset_bs[i:upper_bound], dataset_da[i:upper_bound]):
 #         print(len(d), end=' ')
         vectorised_seq.append([tokenizer.encode(sent).ids[:max_sent_len] for sent in d])
-        # tokenized_bs.append([wordtoidx.get(word, 1) for word in tokenize_en(bs)[:-1]])
-        tokenized_bs.append(tokenizer.encode(bs).ids[:-1])
-        # tokenized_da.append([wordtoidx.get(word, 1) for word in tokenize_en(da)[:-1]])
-        tokenized_da.append(tokenizer.encode(da).ids[:-1])
+        tokenized_bs.append(tokenizer.encode(bs).ids[:50]) #check if 50 covers all tokens
+        tokenized_da.append(tokenizer.encode(da).ids[:50])
 
     seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in tokenized_seq])
     seq_tensor = torch.zeros(batch_size, max_dial_len, max_sent_len, device=device)
