@@ -22,9 +22,6 @@ from utils import *
 from model import *
 from joint_model import *
 from joint_model_v2 import *
-from joint_model_v2_2 import *
-from joint_model_v3 import *
-from joint_model_v4 import *
 from metrics import *
 from collections import OrderedDict
 from evaluate import evaluateModel
@@ -488,6 +485,25 @@ def test_split(split, model, args, criterion):
 	evaluate(model, args, data, dataset_counter, dataset_bs, dataset_da, args.batch_size, criterion, split, 'beam', 5)
 	
 
+parser = argparse.ArgumentParser() 
+
+parser.add_argument("-embed", "--embedding_size", default=160, type=int, help = "Give embedding size")
+parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads")
+parser.add_argument("-hid", "--nhid", default=160, type=int,  help = "Give hidden size")
+
+parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1")
+parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2")
+parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
+
+parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
+parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
+parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
+parser.add_argument("-lr", "--learning_rate",default=0.0001, type=float, help = "Give learning rate")
+parser.add_argument("-model", "--model_type", default="joint_v2", help="Give model name one of [joint, joint_v2, action_pred]")
+parser.add_argument("-log_path", "--log_path", default="notset", help="Give log path name")
+parser.add_argument("-nd", "--non_delex", action="store_true", help = "Use non-delexicalized context inputs")
+
+args = parser.parse_args()
 
 # global logger
 logger = logging.getLogger(__name__)
@@ -495,9 +511,9 @@ logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(asctime)s]:%(message)s")
 
 
-train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = gen_dataset_joint('train')
-val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses = gen_dataset_joint('val')
-test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses =gen_dataset_joint('test')
+train,train_counter,train_hierarchial_actvecs,train_dialog_files, train_responses = gen_dataset_with_acts('train', non_delex=args.non_delex)
+val, val_counter, val_hierarchial_actvecs, val_dialog_files, val_responses = gen_dataset_with_acts('val', non_delex=args.non_delex)
+test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses =gen_dataset_with_acts('test', non_delex=args.non_delex)
 
 # print(val[0])
 # val, val_bs, val_dialog_act, val_responses, val_dialog_files = shuffle( 'val')
@@ -507,45 +523,32 @@ test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses 
 
 max_sent_len = 50
 
-idxtoword, wordtoidx = build_vocab_freqbased(load=False)
-vocab_size = len(idxtoword)
-
-print('length of vocab: ', vocab_size)
+if args.non_delex:
+	print("Mode: Non-Delex")
+	tokenizer = build_vocab_freqbased(V_PATH="./data/mwoz-bpe-non_delex.tokenizer.json", non_delex=args.non_delex, vocab_size=2_000)
+else:
+	print("Mode: Delex")
+	tokenizer = build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", non_delex=args.non_delex, vocab_size=2_000)
+vocab_size = len(tokenizer.get_vocab())
+print('length of vocab: ', tokenizer.get_vocab())
 # print(idxtoword)
 
-ntokens=len(wordtoidx)
+ntokens=len(tokenizer.get_vocab())
 
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
-# Use these in evaluation - to convert predictions to total vocab
-d_to_imap = {}
-s_to_imap = {}
-a_to_imap = {}
-for w, v in Constants.V_domains_wtoi.items():
-	d_to_imap[v]=wordtoidx[w]
-for w, v in Constants.V_slots_wtoi.items():
-	s_to_imap[v]=wordtoidx[w]
-for w, v in Constants.V_actions_wtoi.items():
-	a_to_imap[v]=wordtoidx[w]
 
 
 def run(args, optuna_callback=None):
 	global logger 
 
+	nd = 'non_delex_' if args.non_delex else ''
 	if args.log_path!="notset":
 		log_path = args.log_path
-	elif args.model_type=="action_pred":
-		log_path ='running/action_pred/'
 	elif args.model_type=="joint":
-		log_path ='running/joint_simple/'
+		log_path = f'running/{nd}_joint/'
 	elif args.model_type=="joint_v2":
-		log_path ='running/joint_v2/'
-	elif args.model_type=="joint_v2_2":
-		log_path ='running/joint_v2_2/'
-	elif args.model_type=="joint_v3":
-		log_path ='running/joint_v3/'
-	elif args.model_type=="joint_v4":
-		log_path ='running/joint_v4/'
+		log_path = f'running/{nd}_joint_v2/'
 	else:
 		print('Invalid model type')
 		raise ValueError
@@ -588,15 +591,6 @@ def run(args, optuna_callback=None):
 	elif args.model_type=="joint_v2":
 		model = Joint_model_v2(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
 		criterion = nn.CrossEntropyLoss(ignore_index=0)
-	elif args.model_type=="joint_v2_2":
-		model = Joint_model_v2_2(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
-		criterion = nn.CrossEntropyLoss(ignore_index=0)
-	elif args.model_type=="joint_v3":
-		model = Joint_model_v3(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
-		criterion = nn.CrossEntropyLoss(ignore_index=0)
-	elif args.model_type=="joint_v4":
-		model = Joint_model_v4(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout).to(device)
-		criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 	seed = 123
 	torch.manual_seed(seed)
@@ -636,23 +630,5 @@ def run(args, optuna_callback=None):
 
 
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser() 
-
-	parser.add_argument("-embed", "--embedding_size", default=160, type=int, help = "Give embedding size")
-	parser.add_argument("-heads", "--nhead", default=4, type=int,  help = "Give number of heads")
-	parser.add_argument("-hid", "--nhid", default=160, type=int,  help = "Give hidden size")
-
-	parser.add_argument("-l_e1", "--nlayers_e1", default=3, type=int,  help = "Give number of layers for Encoder 1")
-	parser.add_argument("-l_e2", "--nlayers_e2", default=3, type=int,  help = "Give number of layers for Encoder 2")
-	parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
-
-	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
-	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
-	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
-	parser.add_argument("-lr", "--learning_rate",default=0.0001, type=float, help = "Give learning rate")
-	parser.add_argument("-model", "--model_type", default="joint_v2", help="Give model name one of [joint, joint_v2, joint_v2_2, joint_v3, joint_v4, action_pred]")
-	parser.add_argument("-log_path", "--log_path", default="notset", help="Give log path name")
-
-	args = parser.parse_args()
 	run(args)
 
