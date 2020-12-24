@@ -97,8 +97,8 @@ def gen_dataset_joint(split_name, non_delex=False): # [ no of turns , src, tgt, 
 	
 	data = []
 	max_sent_len = 48
-	MBS=51 # belief state text input len
-	MDA=52 # dialog act text input len
+	MBS=70 # belief state text input len
+	MDA=70 # dialog act text input len
 	responses = []
 	''' 
 		# RESULTS - Train, valid, test
