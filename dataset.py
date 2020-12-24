@@ -89,7 +89,7 @@ def gen_dataset_with_acts(split_name, non_delex=False): # [ no of turns , src, t
 
 
 
-def gen_dataset_joint(split_name): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
+def gen_dataset_joint(split_name, non_delex=False): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
 	file_path = 'hdsa_data/hdsa_data/'
 	data_dir = 'data'
 	dataset_file = open(file_path+split_name+'.json', 'r')
@@ -115,8 +115,12 @@ def gen_dataset_joint(split_name): # [ no of turns , src, tgt, act_vecs, hierarc
 		src = []
 		
 		for turn_num, turn in enumerate(x['info']):
-			user= 'SOS '+' '.join(turn['user'].lower().strip().split()[:max_sent_len])+' EOS' 
-			sys = 'SOS '+' '.join(turn['sys'].lower().strip().split()[:max_sent_len])+' EOS'
+			# NON-DELEX
+			_SYS = 'sys_orig' if non_delex else 'sys'
+			_USR = 'user_orig' if non_delex else 'user'
+			
+			user= 'SOS '+' '.join(turn[_USR].lower().strip().split()[:max_sent_len])+' EOS' 
+			sys = 'SOS '+' '.join(turn[_SYS].lower().strip().split()[:max_sent_len])+' EOS'
 
 			src.append(user)
 

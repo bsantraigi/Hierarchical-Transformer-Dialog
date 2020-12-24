@@ -74,7 +74,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	total_da_loss =0
 
 	start_time = time.time()
-	ntokens = len(idxtoword)
+	ntokens = len(tokenizer.get_vocab())
 	nbatches = len(train)//batch_size
 	
 #     if torch.cuda.is_available():
@@ -86,7 +86,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	# response_loss = torch.tensor([0], device=device)
 	# da_loss=torch.tensor([0], device=device)
 
-	for i, (data, targets, labels, bs, da) in enumerate(data_loader(train, train_counter, train_bs, train_dialog_act, batch_size, wordtoidx)):
+	for i, (data, targets, labels, bs, da) in enumerate(data_loader(train, train_counter, train_bs, train_dialog_act, batch_size, tokenizer)):
 
 		batch_size_curr = data.shape[1]
 		# optimizer.zero_grad()
@@ -133,7 +133,7 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 	total_bs_loss =0
 	total_da_loss =0
 	start_time = time.time()
-	ntokens = len(idxtoword)
+	ntokens = len(tokenizer.get_vocab())
 	
 	dataset, dataset_counter, dataset_bs, dataset_da = get_files_joint(split)
 
@@ -141,7 +141,7 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 	# da_loss=torch.tensor([0], device=device)
 	
 	with torch.no_grad():
-		for i, (data, targets, labels, bs, da) in enumerate(data_loader(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, wordtoidx)):
+		for i, (data, targets, labels, bs, da) in enumerate(data_loader(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, tokenizer)):
 
 			batch_size_curr = data.shape[1]
 			output, bs_logits , da_logits = model(data, bs, da, targets)
@@ -191,7 +191,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 	da_loss=torch.tensor([0], device=device)
 
 	with torch.no_grad():
-		for i, (data, targets, labels, bs, da) in enumerate(data_loader(dataset,dataset_counter, dataset_bs, dataset_da , batch_size, wordtoidx)): # , total=len(dataset)//batch_size):
+		for i, (data, targets, labels, bs, da) in enumerate(data_loader(dataset,dataset_counter, dataset_bs, dataset_da , batch_size, tokenizer)): # , total=len(dataset)//batch_size):
 
 			batch_size_curr = targets.shape[1]
 
@@ -268,11 +268,11 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 		indices = list(range(0, len(dataset)))
 		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
 
-		pred_hyp = tensor_to_sents(hyp , wordtoidx)  # hyp[indices]
+		pred_hyp = tensor_to_sents(hyp , tokenizer)  # hyp[indices]
 		pred_ref, all_dialog_files = split_to_responses(split)
 		
-		bleu_score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
-		f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
+		bleu_score = BLEU_calc.score(pred_hyp, pred_ref, tokenizer)*100
+		f1_entity = F1_calc.score(pred_hyp, pred_ref, tokenizer)*100
 
 		total_loss = total_loss/len(dataset)
 		total_response_loss = total_response_loss/len(dataset)
@@ -307,10 +307,10 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 		data, _, _, _ = get_files_joint(split)
 
 		# decode in individual vocabs
-		bs_pred = tensor_to_sents(bs_pred, wordtoidx)
-		bs_act = tensor_to_sents(bs_act, wordtoidx)
-		da_pred = tensor_to_sents(da_pred, wordtoidx)
-		da_act = tensor_to_sents(da_act, wordtoidx)
+		bs_pred = tensor_to_sents(bs_pred, tokenizer)
+		bs_act = tensor_to_sents(bs_act, tokenizer)
+		da_pred = tensor_to_sents(da_pred, tokenizer)
+		da_act = tensor_to_sents(da_act, tokenizer)
 
 		if method=='beam':
 			pred_file = open(args.log_path+'pred_beam_'+str(beam_size)+'_'+split+'.txt', 'w')
@@ -514,12 +514,6 @@ formatter = logging.Formatter("[%(asctime)s]:%(message)s")
 train,train_counter, train_bs, train_dialog_act, train_dialog_files, train_responses = gen_dataset_joint('train', non_delex=args.non_delex)
 val, val_counter, val_bs, val_dialog_act, val_dialog_files, val_responses = gen_dataset_joint('val', non_delex=args.non_delex)
 test, test_counter, test_bs, test_dialog_act, test_dialog_files, test_responses =gen_dataset_joint('test', non_delex=args.non_delex)
-
-# print(val[0])
-# val, val_bs, val_dialog_act, val_responses, val_dialog_files = shuffle( 'val')
-# print("******************************************************")
-# print(val[0])
-# exit()
 
 max_sent_len = 50
 
