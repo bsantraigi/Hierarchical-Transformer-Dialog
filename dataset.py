@@ -137,7 +137,7 @@ def gen_dataset_joint(split_name, non_delex=False): # [ no of turns , src, tgt, 
 
 			bs += ' EOS '			
 			bs = bs + (MBS -len(bs.split()))*' PAD'
-			# In bs.split()- domains - bs[::2], slots-bs[1::2]
+			# In bs.split()- domains - bs[::3], slots-bs[1::3] - won't work with bpe tokenization
 			
 			# === use turn['KB'] # TODO
 
