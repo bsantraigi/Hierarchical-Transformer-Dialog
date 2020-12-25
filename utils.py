@@ -57,7 +57,7 @@ def Rand(start, end, num):
     return res 
 
 # class batch from annotated transformer with acts
-def data_gen(dataset, dataset_bs, dataset_da, batch_size, i, wordtoidx):
+def data_gen(dataset, dataset_bs, dataset_da, batch_size, i, tokenizer):
     # print(i, len(dataset))
     max_dial_len = len(dataset[i])-1
 
@@ -68,7 +68,7 @@ def data_gen(dataset, dataset_bs, dataset_da, batch_size, i, wordtoidx):
 
     for d, bs, da in zip(dataset[i:upper_bound], dataset_bs[i:upper_bound], dataset_da[i:upper_bound]):
 #         print(len(d), end=' ')
-        vectorised_seq.append([tokenizer.encode(sent).ids[:max_sent_len] for sent in d])
+        tokenized_seq.append([tokenizer.encode(sent).ids[:max_sent_len] for sent in d])
         tokenized_bs.append(tokenizer.encode(bs).ids[:50]) #check if 50 covers all tokens
         tokenized_da.append(tokenizer.encode(da).ids[:50])
 
@@ -105,8 +105,8 @@ def data_loader(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, to
         for i in range(prev, prev+val, batch_size):
 #             print(i, min(batch_size, prev+val-i))
             yield data_gen(dataset, dataset_bs, dataset_da, min(batch_size, prev+val-i), i, tokenizer)
-        #     break # uncomment both break to run 1 batch for SET++,HIER++,joint models
-        # break
+            break # uncomment both break to run 1 batch for SET++,HIER++,joint models
+        break
         prev += val
 
 
