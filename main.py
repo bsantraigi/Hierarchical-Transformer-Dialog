@@ -536,7 +536,7 @@ F1_calc = F1Scorer()
 def run(args, optuna_callback=None):
 	global logger 
 
-	nd = 'non_delex_' if args.non_delex else ''
+	nd = 'nondelex_bpe_' if args.non_delex else ''
 	if args.log_path!="notset":
 		log_path = args.log_path
 	elif args.model_type=="joint":
