@@ -2,8 +2,8 @@ import math, torch, torch.nn as nn, torch.nn.functional as F
 from collections import Counter
 from nltk.util import ngrams
 import json, numpy as np
-
-from tokenizers import ByteLevelBPETokenizer, Tokenizer
+import Constants
+from action_pred import compute_metrics_binary
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # print(device)
@@ -11,16 +11,60 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 max_sent_len = 50
 
 
-def tensor_to_sents(data, tokenizer): #2d tensor or list of tensors!
+def tensor_to_sents(data, wordtoidx): #2d tensor or list of tensors!
 #     return [' '.join([idxtoword[e.item()] for e in line) for line in data]
     sents=[]
-    eos_index = tokenizer.get_vocab()["EOS"] # wordtoidx['EOS']
-    # idxtoword = {v:k for k,v in wordtoidx.items()}
+    eos_index = Constants.EOS # wordtoidx['EOS']
+    idxtoword = {v:k for k,v in wordtoidx.items()}
     for line in data:
         l = (line==eos_index).nonzero()[0].item()+1 if (line==eos_index).any() else max_sent_len
-        # sents.append(' '.join([idxtoword[e.item()] for e in line[:l]]))
-        sents.append(tokenizer.decode(line.long()[:l].tolist()))
+        sents.append(' '.join([idxtoword[e.item()] for e in line[:l]]))
     return sents
+
+def compute_bs_accuracy(pred, act):
+	total_actual = act.reshape(act.shape[0], -1, 2)
+	pred_l = pred.reshape(pred.shape[0], -1, 2) # N, triplets, 2
+	mask = ~((total_actual==Constants.PAD)|(total_actual==2)|(total_actual==3)) #dont compute for PAD/EOS/SOS - 2,3 are SOS, EOS in total vocab
+
+	temp = (total_actual==pred_l)*mask # N, triplets, 2
+	tp = (temp[:,:,0]*temp[:,:,1]).cpu().numpy().sum()
+	total = np.count_nonzero((total_actual*mask).cpu().numpy())
+	joint_acc = (2*tp)/total #/2 as each triplet is counted twice
+
+	slot_acc = temp.sum().cpu().numpy()/total
+	return joint_acc*100, slot_acc*100
+
+
+def generate_hieract(act): # input - N, triplets, 3
+	hieract = np.zeros((act.shape[0], 44))
+
+	for i, da in enumerate(act-3): # -3 to remove pad,sos,eos
+		for d in da[:,0][da[:,0]>=0]:
+			hieract[i][d]=1
+		for a in da[:,1][da[:,1]>=0]:
+			hieract[i][a+10]=1
+		for s in da[:,2][da[:,2]>=0]:
+			hieract[i][s+17]=1
+	return hieract
+
+def compute_da_metrics(pred, act): # begin from first triplet(no sos) in both - and in individual vocabs
+	act = act.reshape(act.shape[0], -1, 3) # N, triplets, 3
+	pred = pred.reshape(pred.shape[0], -1, 3) # N, triplets, 3
+
+	# pred_hieract = generate_hieract(pred)
+	# act_hieract = generate_hieract(act)
+	# precision, recall, f1_score = compute_metrics_binary(pred_hieract.reshape(-1), act_hieract.reshape(-1))
+	precision, recall, f1_score =0,0,0	
+
+	mask = ~((act==Constants.PAD)|(act==2)|(act==3)) # Don't count pad or eos, won't have sos in actual da - 2,3 are SOS, EOS in total vocab
+
+	temp = (act==pred)*mask
+	tp = (temp[:,:,0]*temp[:,:,1]*temp[:,:,2]).cpu().numpy().sum()
+	total = np.count_nonzero((act*mask).cpu().numpy())
+
+	joint_acc = (3*tp)/total
+	slot_acc = temp.sum().cpu().numpy()/total
+	return (joint_acc*100, slot_acc*100), (precision*100, recall*100, f1_score*100)
 
 
 def obtain_TP_TN_FN_FP(pred, act, TP, TN, FN, FP, elem_wise=False):
@@ -44,8 +88,6 @@ def obtain_TP_TN_FN_FP(pred, act, TP, TN, FN, FP, elem_wise=False):
 		return TP, TN, FN, FP
 
 
-
-
 class F1Scorer(object):
 	## BLEU score calculator via GentScorer interface
 	## it calculates the BLEU-4 by taking the entire corpus in
@@ -53,13 +95,13 @@ class F1Scorer(object):
 	def __init__(self):
 		pass
 
-	def score(self, old_hypothesis, old_corpus, tokenizer):
+	def score(self, old_hypothesis, old_corpus, wordtoidx):
 		hypothesis = []
 		corpus = []
 		if torch.is_tensor(old_hypothesis) or torch.is_tensor(old_hypothesis[0]):
-			old_hypothesis = tensor_to_sents(old_hypothesis, tokenizer)
+			old_hypothesis = tensor_to_sents(old_hypothesis, wordtoidx)
 		if torch.is_tensor(old_corpus):
-			old_corpus = tensor_to_sents(old_corpus, tokenizer)
+			old_corpus = tensor_to_sents(old_corpus, wordtoidx)
 
 		for h, c in zip(old_hypothesis, old_corpus):
 			# print(h, '\n',  c, '\n\n')
@@ -108,13 +150,13 @@ class BLEUScorer(object):
 	def __init__(self):
 		pass
 
-	def score(self, old_hypothesis, old_corpus,tokenizer,  n=1):
+	def score(self, old_hypothesis, old_corpus,wordtoidx,  n=1):
 		hypothesis = []
 		corpus = []
 		if torch.is_tensor(old_hypothesis) or torch.is_tensor(old_hypothesis[0]):
-			old_hypothesis = tensor_to_sents(old_hypothesis, tokenizer)
+			old_hypothesis = tensor_to_sents(old_hypothesis, wordtoidx)
 		if torch.is_tensor(old_corpus):
-			old_corpus = tensor_to_sents(old_corpus, tokenizer)
+			old_corpus = tensor_to_sents(old_corpus, wordtoidx)
 
 		for h, c in zip(old_hypothesis, old_corpus):
 			# print(h, '\n',  c, '\n\n')
