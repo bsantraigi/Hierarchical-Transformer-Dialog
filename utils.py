@@ -110,58 +110,6 @@ def data_loader(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, to
         prev += val
 
 
-# class batch from annotated transformer with acts
-def data_gen_acts(dataset, act_vecs, batch_size, i, tokenizer):
-    # print(i, len(dataset))
-    max_dial_len = len(dataset[i])-1
-
-    upper_bound = i+batch_size
-    vectorised_seq = []
-    for d in dataset[i:upper_bound]:
-#         print(len(d), end=' ')
-        vectorised_seq.append([tokenizer.encode(sent).ids[:max_sent_len] for sent in d])
-
-    batch_actvecs = torch.tensor(act_vecs[i:upper_bound], device=device)
-
-    seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in vectorised_seq]) # max_seq_len -> max_dial_len
-    seq_tensor = torch.zeros(batch_size, max_dial_len, max_sent_len, device=device)
-
-    target_tensor = torch.zeros(batch_size, max_sent_len, device=device)
-    label_tensor = torch.zeros(batch_size, max_sent_len, device=device)
-
-    for idx,(seq, seqlen) in enumerate(zip(vectorised_seq, seq_lengths)):
-        for i in range(seqlen-1):
-            seq_tensor[idx, i, :len(seq[i])] = torch.LongTensor(seq[i])
-        target_tensor[idx, :len(seq[seqlen-1])] = torch.LongTensor(seq[seqlen-1]) # last sentence in dialog
-        label_tensor[idx, :len(seq[seqlen-1])-1] = torch.LongTensor(seq[seqlen-1][1:]) # last sentence in dialog from first word, ie without sos
-    
-    seq_tensor = seq_tensor.transpose(1,2).reshape(batch_size, -1).transpose(0,1)
-    # seq_tensor - (msl*mdl , bs)
-
-    target_tensor = target_tensor.transpose(0,1)
-    label_tensor = label_tensor.transpose(0,1)
-    batch_actvecs = batch_actvecs.transpose(0,1)
-
-    # print(batch_actvecs.shape)
-    return seq_tensor.long(), target_tensor.long(), label_tensor.long(), batch_actvecs.float()
-
-
-def data_loader_acts(dataset, dataset_counter, act_vecs, batch_size, tokenizer): 
-    # return batches according to dialog len, -> all similar at once
-    # do mask also for these
-    prev=0
-    for dial_len, val in dataset_counter.items():
-    #    if val<2:
-    #        continue
-        for i in range(prev, prev+val, batch_size):
-#             print(i, min(batch_size, prev+val-i))
-            yield data_gen_acts(dataset, act_vecs, min(batch_size, prev+val-i), i, tokenizer)
-        #     break # uncomment both break stats to run for 1 batch for SET++,HIER++ models
-        # break
-        prev += val
-
-
-
 def plot_grad_flow(named_parameters):
     '''Plots the gradients flowing through different layers in the net during training.
     Can be used for checking for possible gradient vanishing / exploding problems.
