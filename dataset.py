@@ -26,69 +26,6 @@ def tokenize_en(sentence):
 	return sentence.split()
 
 
-def gen_dataset_with_acts(split_name, non_delex=False): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
-	file_path = 'hdsa_data/hdsa_data/'
-	data_dir = 'data'
-	dataset_file = open(file_path+split_name+'.json', 'r')
-	dataset = json.load(dataset_file)
-	
-			
-	data = []
-	max_sent_len = 48
-	responses = []
-
-	for x in dataset:
-		dialog_file = x['file']
-
-		src = []
-		
-		for turn_num, turn in enumerate(x['info']):
-			# NON-DELEX
-			_SYS = 'sys_orig' if non_delex else 'sys'
-			_USR = 'user_orig' if non_delex else 'user'
-			
-			user= 'SOS '+' '.join(turn[_USR].lower().strip().split()[:max_sent_len])+' EOS' 
-			sys = 'SOS '+' '.join(turn[_SYS].lower().strip().split()[:max_sent_len])+' EOS'
-
-			src.append(user)
-
-			hierarchical_act_vecs = np.zeros((Constants.act_len), 'int64')
-
-			if turn['act'] != "None":
-				for w in turn['act']:
-					d, f, s = w.split('-')
-					hierarchical_act_vecs[Constants.domains.index(d)] = 1
-					hierarchical_act_vecs[len(Constants.domains) + Constants.functions.index(f)] = 1
-					hierarchical_act_vecs[len(Constants.domains) + len(Constants.functions) + Constants.arguments.index(s)] = 1
-
-			context = src
-			true_response = ('SOS '+' '.join(turn['sys'].lower().strip().split())+' EOS')
-
-			data.append([turn_num, src[:(2*turn_num+1)], [sys], hierarchical_act_vecs, dialog_file, true_response])
-
-			src.append(sys)
-			
-
-	print('Length of', split_name,' dataset is', len(data))
-
-	data.sort(key=lambda x:x[0]) #, reverse=True) # first use the longer dialogs to reserve the GPU
-	# data = data[:20] # COMMENT THIS IN FINAL RUN
-	c=Counter()
-	c.update([len(x[1])+len(x[2]) for x in data])
-	# print(c)
-	
-	all_data = [x[1]+x[2] for x in data]
-	all_hierarchial_act_vecs = [f[3] for f in data]
-	all_dialog_files = [f[4] for f in data]
-	true_responses = [f[5] for f in data]
-	
-	assert(len(all_data)==len(all_hierarchial_act_vecs))
-	# print('Loaded and save ', split_name, ' dataset')
-	
-	return all_data, c, all_hierarchial_act_vecs, all_dialog_files, true_responses
-
-
-
 def gen_dataset_joint(split_name, non_delex=False): # [ no of turns , src, tgt, act_vecs, hierarchial_act_vecs]
 	file_path = 'hdsa_data/hdsa_data/'
 	data_dir = 'data'
@@ -106,8 +43,6 @@ def gen_dataset_joint(split_name, non_delex=False): # [ no of turns , src, tgt, 
 		max_bs_triplets:  12 max_act_triplets:  10
 		max_bs_triplets:  12 max_act_triplets:  10
 	'''
-	max_act_triplets =0
-	max_bs_triplets =0
 
 	for x in dataset:
 		dialog_file = x['file']
@@ -121,7 +56,7 @@ def gen_dataset_joint(split_name, non_delex=False): # [ no of turns , src, tgt, 
 			
 			user= 'SOS '+' '.join(turn[_USR].lower().strip().split()[:max_sent_len])+' EOS' 
 			sys = 'SOS '+' '.join(turn[_SYS].lower().strip().split()[:max_sent_len])+' EOS'
-
+			sys_delex = 'SOS '+' '.join(turn['sys'].lower().strip().split()[:max_sent_len])+' EOS'
 			src.append(user)
 
 			bs_list=[]
@@ -136,6 +71,7 @@ def gen_dataset_joint(split_name, non_delex=False): # [ no of turns , src, tgt, 
 				bs += ele[0] + " " + ele[1] + " " + ele[2] + " , " #separate by comma
 
 			bs += ' EOS '
+			print(bs)
 			bs = bs + (MBS -len(bs.split()))*' PAD'
 			# In bs.split()- domains - bs[::3], slots-bs[1::3] - won't work with bpe tokenization -> have to change to bs, da metrics. 
 			
@@ -157,7 +93,7 @@ def gen_dataset_joint(split_name, non_delex=False): # [ no of turns , src, tgt, 
 
 			context = src
 			true_response = ('SOS '+' '.join(turn['sys'].lower().strip().split())+' EOS')
-			data.append([turn_num, src[:(2*turn_num+1)], [sys], bs, dialog_act, dialog_file, true_response])
+			data.append([turn_num, src[:(2*turn_num+1)], [sys_delex], bs, dialog_act, dialog_file, true_response]) # response is delexicalized, history is original
 
 			src.append(sys)
 
