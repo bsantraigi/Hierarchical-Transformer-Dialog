@@ -67,11 +67,12 @@ def gen_dataset_joint(split_name, non_delex=False): # [ no of turns , src, tgt, 
 					bs_list.append([domain, v[0].lower(), v[1].lower()]) #Add v[1] - bs values
 
 			bs_list = sorted(bs_list) # sort in alphabetical according to domain first, then by slot
-			for ele in bs_list:
-				bs += ele[0] + " " + ele[1] + " " + ele[2] + " , " #separate by comma
+			for idx, ele in enumerate(bs_list):
+				bs += ele[0] + " " + ele[1] + " " + ele[2]
+				if idx!=len(bs_list)-1:
+					bs += " , " #separate by comma
 
 			bs += ' EOS '
-			print(bs)
 			bs = bs + (MBS -len(bs.split()))*' PAD'
 			# In bs.split()- domains - bs[::3], slots-bs[1::3] - won't work with bpe tokenization -> have to change to bs, da metrics. 
 			

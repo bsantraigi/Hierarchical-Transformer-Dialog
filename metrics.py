@@ -21,18 +21,28 @@ def tensor_to_sents(data, wordtoidx): #2d tensor or list of tensors!
         sents.append(' '.join([idxtoword[e.item()] for e in line[:l]]))
     return sents
 
-def compute_bs_accuracy(pred, act):
-	total_actual = act.reshape(act.shape[0], -1, 2)
-	pred_l = pred.reshape(pred.shape[0], -1, 2) # N, triplets, 2
-	mask = ~((total_actual==Constants.PAD)|(total_actual==2)|(total_actual==3)) #dont compute for PAD/EOS/SOS - 2,3 are SOS, EOS in total vocab
+def compute_bs_accuracy(pred, act): # bs, 50
+	joint_matches =0
+	joint_total=0
+	slot_matches=0
+	slot_acc=0
+	for p,a in zip(pred, act):
+		p = [e.strip().split(" ", 2) for e in  p.strip().split(',')]
+		a = [e.strip().split(" ", 2) for e in  a.strip().split(',')]
+		joint_total += len(a)
+		slot_total += 3*len(a)
+		joint_flag=1
+		for e1, e2 in zip(p, a):
+			if(e1==e2):
+				slot_matches+=1
+			else:
+				joint_flag=0
+		if(joint_flag):
+			joint_matches+=1
 
-	temp = (total_actual==pred_l)*mask # N, triplets, 2
-	tp = (temp[:,:,0]*temp[:,:,1]).cpu().numpy().sum()
-	total = np.count_nonzero((total_actual*mask).cpu().numpy())
-	joint_acc = (2*tp)/total #/2 as each triplet is counted twice
-
-	slot_acc = temp.sum().cpu().numpy()/total
-	return joint_acc*100, slot_acc*100
+	joint_acc = joint_matches/joint_total * 100
+	slot_acc = slot_matches/slot_total * 100
+	return joint_acc, slot_acc
 
 
 def generate_hieract(act): # input - N, triplets, 3

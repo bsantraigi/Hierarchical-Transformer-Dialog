@@ -192,7 +192,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 	with torch.no_grad():
 		for i, (data, targets, labels, bs, da) in enumerate(data_loader(dataset,dataset_counter, dataset_bs, dataset_da , batch_size, tokenizer)): # , total=len(dataset)//batch_size):
-
+			# bs, da both are 50, 32
 			batch_size_curr = targets.shape[1]
 
 			if method=='beam':
@@ -208,12 +208,11 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 				if isinstance(model, nn.DataParallel):
 					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da, use_gt = use_gt) # .module. if using dataparallel
 				else: # da_output_i in individal vocab indices
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da, use_gt= use_gt)
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, None, bs, da, use_gt= use_gt)
 
 			if torch.is_tensor(output): # greedy search
-				# print(bs_logits.shape, bs.shape) - torch.Size([49, 32, 1515]) torch.Size([50, 32])
+				# print(bs_logits.shape, bs.shape) - torch.Size([49, 32, 1515]) torch.Size([50, 32]) - da also same
 				bs_loss = criterion(bs_logits.reshape(-1, ntokens), bs[1:].reshape(-1)) 
-
 				da_loss = criterion(da_logits.reshape(-1, ntokens), da[1:].reshape(-1))
 				response_loss = criterion(output.reshape(-1, ntokens), labels.reshape(-1))
 
@@ -226,7 +225,6 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 				total_loss += cur_loss.item() * batch_size_curr
 
-				# output = torch.max(output, dim=2)[1]
 				output_max = post_process(output_max.transpose(0,1))
 				
 				if i==0:
@@ -246,24 +244,38 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 			if i==0: #both greedy,beam
 				bs_pred = bs_output.transpose(0,1) # bs, 50 - with sos
 				bs_act = bs.transpose(0,1) #bs,50
-				da_pred = da_output.transpose(0,1) # bs, 51
+				da_pred = da_output.transpose(0,1) # bs, 50 *changed
 				da_act = da.transpose(0,1)
 			else:
 				bs_pred= torch.cat([bs_pred, bs_output.transpose(0,1)])
 				bs_act = torch.cat([bs_act, bs.transpose(0,1)])
-				da_pred=torch.cat([da_pred, da_output.transpose(0,1)])# bs, 51
+				da_pred=torch.cat([da_pred, da_output.transpose(0,1)])# bs, 50 *changed
 				da_act=torch.cat([da_act, da.transpose(0,1)])
 
 
 		"""
 		bs_pred.shape - bs, 50 - with sos
 		bs_act[0].shape, bs_act[1].shape = bs, 25 -> changed to bs,50 below
-		in metrics such as accuracy, exlcude sos, eos, pad
+		in BS metrics(accuracy), exlcude sos, eos, pad
 		both bs_pred, bs_act in total vocab indices now
 		"""
 
-		bs_joint_acc, bs_slot_acc = compute_bs_accuracy(bs_pred, bs_act)
-		da_acc, da_hdsa_metrics = compute_da_metrics(da_pred, da_act)
+		# print(bs_pred.shape, bs_act.shape)
+		# print(bs_pred[0])
+		# print(tokenizer.decode(bs_pred[1].numpy()))
+		# s = tokenizer.decode(bs_act[1].numpy())
+		# print(s)
+		# print(s.strip().split(','))
+		# print(bs_act)
+		# l = bs_act.cpu().numpy()
+		# print(l)
+		# l = tokenizer.decode_batch(l)
+		# print(len(l))
+		# print(l)
+		# exit()
+
+		bs_joint_acc, bs_slot_acc = compute_bs_accuracy(tokenizer.decode_batch(bs_pred.numpy()), tokenizer.decode_batch(bs_act.numpy()))
+		# da_acc, da_hdsa_metrics = compute_da_metrics(tokenizer.decode_batch(da_pred.numpy()), tokenizer.decode_batch(da_act.numpy()))
 
 		indices = list(range(0, len(dataset)))
 		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
@@ -330,7 +342,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 	logger.debug('==>{}\tBelief state Joint acc: {:0.2f}\tSlot acc: {:0.2f}'.format(split,  bs_joint_acc, bs_slot_acc))
 
-	logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f}'.format(split, da_acc[0], da_acc[1]))
+	# logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f}'.format(split, da_acc[0], da_acc[1]))
 	# logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f} || HDSA precision: {:0.2f}  recall {:0.2f}  f1_score: {:0.2f}'.format(split, da_acc[0], da_acc[1], da_hdsa_metrics[0], da_hdsa_metrics[1], da_hdsa_metrics[2]))
 
 	criteria = bleu_score+0.5*(matches+successes)
@@ -524,14 +536,13 @@ else:
 	print("Mode: Delex")
 	tokenizer = build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", non_delex=args.non_delex, vocab_size=2_000)
 vocab_size = len(tokenizer.get_vocab())
-print('length of vocab: ', tokenizer.get_vocab())
+print('length of vocab: ', len(tokenizer.get_vocab()))
 # print(idxtoword)
 
 ntokens=len(tokenizer.get_vocab())
 
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
-
 
 def run(args, optuna_callback=None):
 	global logger 
@@ -607,8 +618,8 @@ def run(args, optuna_callback=None):
 	logger.debug('\n\n\n=====>\n')
 
 	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
-	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
+	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	logger.debug('Testing model\n')
 	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
