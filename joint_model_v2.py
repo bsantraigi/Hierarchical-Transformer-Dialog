@@ -264,14 +264,14 @@ class Joint_model_v2(nn.Module):
 		belief_memory = self.pos_encoder(belief_memory)
 
 		# Generate dialog act
-		for i in range(0, max_sent_len): # predict 50 words
+		for i in range(0, max_sent_len-1): # predict 49 words
 			cur_da, cur_logits = self.decode_dialog_act(da, belief_memory, bs_pad_mask, memory)
 			if i==0:
 				da_logits = cur_logits
 			else:
 				da_logits = torch.cat([da_logits, cur_logits], dim=0)
 			da = torch.cat([da, cur_da])
-		# da - [51, 32] - with sos, da_logits - ([50, 32, V])
+		# da - [50, 32] - with sos, da_logits - ([49, 32, V])
 		da = postprocess(da)
 		pred_da = da
 		if return_logits:

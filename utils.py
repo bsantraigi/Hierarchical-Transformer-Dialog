@@ -105,8 +105,8 @@ def data_loader(dataset, dataset_counter, dataset_bs, dataset_da, batch_size, to
         for i in range(prev, prev+val, batch_size):
 #             print(i, min(batch_size, prev+val-i))
             yield data_gen(dataset, dataset_bs, dataset_da, min(batch_size, prev+val-i), i, tokenizer)
-        #     break # uncomment both break to run 1 batch for SET++,HIER++,joint models
-        # break
+            break # uncomment both break to run 1 batch for SET++,HIER++,joint models
+        break
         prev += val
 
 

@@ -45,36 +45,21 @@ def compute_bs_accuracy(pred, act): # bs, 50
 	return joint_acc, slot_acc
 
 
-def generate_hieract(act): # input - N, triplets, 3
-	hieract = np.zeros((act.shape[0], 44))
+#skip this function, use compute_bs_metrics for dialog act also
+def compute_da_metrics(pred, act): # begin from first triplet(no sos) in both
+	joint_matches =0
+	joint_total=0
+	slot_matches=0
+	slot_acc=0
 
-	for i, da in enumerate(act-3): # -3 to remove pad,sos,eos
-		for d in da[:,0][da[:,0]>=0]:
-			hieract[i][d]=1
-		for a in da[:,1][da[:,1]>=0]:
-			hieract[i][a+10]=1
-		for s in da[:,2][da[:,2]>=0]:
-			hieract[i][s+17]=1
-	return hieract
-
-def compute_da_metrics(pred, act): # begin from first triplet(no sos) in both - and in individual vocabs
-	act = act.reshape(act.shape[0], -1, 3) # N, triplets, 3
-	pred = pred.reshape(pred.shape[0], -1, 3) # N, triplets, 3
-
-	# pred_hieract = generate_hieract(pred)
-	# act_hieract = generate_hieract(act)
-	# precision, recall, f1_score = compute_metrics_binary(pred_hieract.reshape(-1), act_hieract.reshape(-1))
-	precision, recall, f1_score =0,0,0	
-
-	mask = ~((act==Constants.PAD)|(act==2)|(act==3)) # Don't count pad or eos, won't have sos in actual da - 2,3 are SOS, EOS in total vocab
-
+	# change from here
 	temp = (act==pred)*mask
 	tp = (temp[:,:,0]*temp[:,:,1]*temp[:,:,2]).cpu().numpy().sum()
 	total = np.count_nonzero((act*mask).cpu().numpy())
 
 	joint_acc = (3*tp)/total
 	slot_acc = temp.sum().cpu().numpy()/total
-	return (joint_acc*100, slot_acc*100), (precision*100, recall*100, f1_score*100)
+	return (joint_acc*100, slot_acc*100), None
 
 
 def obtain_TP_TN_FN_FP(pred, act, TP, TN, FN, FP, elem_wise=False):

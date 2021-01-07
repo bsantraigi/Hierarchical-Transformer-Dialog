@@ -260,22 +260,8 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 		both bs_pred, bs_act in total vocab indices now
 		"""
 
-		# print(bs_pred.shape, bs_act.shape)
-		# print(bs_pred[0])
-		# print(tokenizer.decode(bs_pred[1].numpy()))
-		# s = tokenizer.decode(bs_act[1].numpy())
-		# print(s)
-		# print(s.strip().split(','))
-		# print(bs_act)
-		# l = bs_act.cpu().numpy()
-		# print(l)
-		# l = tokenizer.decode_batch(l)
-		# print(len(l))
-		# print(l)
-		# exit()
-
 		bs_joint_acc, bs_slot_acc = compute_bs_accuracy(tokenizer.decode_batch(bs_pred.numpy()), tokenizer.decode_batch(bs_act.numpy()))
-		# da_acc, da_hdsa_metrics = compute_da_metrics(tokenizer.decode_batch(da_pred.numpy()), tokenizer.decode_batch(da_act.numpy()))
+		da_acc, da_hdsa_metrics = compute_bs_metrics(tokenizer.decode_batch(da_pred.numpy()), tokenizer.decode_batch(da_act.numpy()))#similar pattern as bs, so using same metric function
 
 		indices = list(range(0, len(dataset)))
 		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
@@ -342,7 +328,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 	logger.debug('==>{}\tBelief state Joint acc: {:0.2f}\tSlot acc: {:0.2f}'.format(split,  bs_joint_acc, bs_slot_acc))
 
-	# logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f}'.format(split, da_acc[0], da_acc[1]))
+	logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f}'.format(split, da_acc[0], da_acc[1]))
 	# logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f} || HDSA precision: {:0.2f}  recall {:0.2f}  f1_score: {:0.2f}'.format(split, da_acc[0], da_acc[1], da_hdsa_metrics[0], da_hdsa_metrics[1], da_hdsa_metrics[2]))
 
 	criteria = bleu_score+0.5*(matches+successes)
