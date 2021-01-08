@@ -11,21 +11,22 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 max_sent_len = 50
 
 
-def tensor_to_sents(data, wordtoidx): #2d tensor or list of tensors!
-#     return [' '.join([idxtoword[e.item()] for e in line) for line in data]
-    sents=[]
-    eos_index = Constants.EOS # wordtoidx['EOS']
-    idxtoword = {v:k for k,v in wordtoidx.items()}
-    for line in data:
-        l = (line==eos_index).nonzero()[0].item()+1 if (line==eos_index).any() else max_sent_len
-        sents.append(' '.join([idxtoword[e.item()] for e in line[:l]]))
-    return sents
+def tensor_to_sents(data, tokenizer): #2d tensor or list of tensors!
+	# append eos at end if not generated
+	sents=[]
+	eos_index = Constants.EOS
+	# idxtoword = {v:k for k,v in wordtoidx.items()}
+	for line in data:
+		l = (line==eos_index).nonzero()[0].item()+1 if (line==eos_index).any() else max_sent_len
+		# sents.append(' '.join([idxtoword[e.item()] for e in line[:l]]))
+		sents.append(tokenizer.decode(line[:l].long().numpy()))
+	return sents
 
-def compute_bs_accuracy(pred, act): # bs, 50
+def compute_bs_metrics(pred, act): # bs, 50
 	joint_matches =0
 	joint_total=0
 	slot_matches=0
-	slot_acc=0
+	slot_total=0
 	for p,a in zip(pred, act):
 		p = [e.strip().split(" ", 2) for e in  p.strip().split(',')]
 		a = [e.strip().split(" ", 2) for e in  a.strip().split(',')]
