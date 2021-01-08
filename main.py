@@ -328,7 +328,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 	logger.debug('==>{}\tBelief state Joint acc: {:0.2f}\tSlot acc: {:0.2f}'.format(split,  bs_joint_acc, bs_slot_acc))
 
-	logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f}'.format(split, da_acc[0], da_acc[1]))
+	logger.debug('==>{}\tDialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f}'.format(split, da_acc[0], da_acc[1]))
 	# logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f} || HDSA precision: {:0.2f}  recall {:0.2f}  f1_score: {:0.2f}'.format(split, da_acc[0], da_acc[1], da_hdsa_metrics[0], da_hdsa_metrics[1], da_hdsa_metrics[2]))
 
 	criteria = bleu_score+0.5*(matches+successes)

@@ -22,7 +22,7 @@ def tensor_to_sents(data, tokenizer): #2d tensor or list of tensors!
 		sents.append(tokenizer.decode(line[:l].long().numpy()))
 	return sents
 
-def compute_bs_metrics(pred, act): # bs, 50
+def compute_bs_metrics(pred, act): #N, 50
 	joint_matches =0
 	joint_total=0
 	slot_matches=0
