@@ -206,7 +206,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, [d_to_imap, s_to_imap, a_to_imap], bs, da, use_gt = use_gt) # .module. if using dataparallel
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, None, bs, da, use_gt = use_gt) # .module. if using dataparallel
 				else: # da_output_i in individal vocab indices
 					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, None, bs, da, use_gt= use_gt)
 
