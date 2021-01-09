@@ -87,8 +87,11 @@ def gen_dataset_joint(split_name, non_delex=False): # [ no of turns , src, tgt, 
 
 			dialog_act_list = sorted(dialog_act_list) # sort in alphabetical according to domain first, then by action, then by slot
 
-			for da in dialog_act_list:
-				dialog_act +=  ' '.join(da) + " "
+			for idx, da in enumerate(dialog_act_list):
+				dialog_act +=  ' '.join(da)
+				if idx!=len(dialog_act_list)-1:
+					dialog_act += " , " #separate by comma
+
 			dialog_act += ' EOS '
 			dialog_act = dialog_act + (MDA-len(dialog_act.split()))*' PAD'
 

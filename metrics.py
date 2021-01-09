@@ -19,7 +19,7 @@ def tensor_to_sents(data, tokenizer): #2d tensor or list of tensors!
 	for line in data:
 		l = (line==eos_index).nonzero()[0].item()+1 if (line==eos_index).any() else max_sent_len
 		# sents.append(' '.join([idxtoword[e.item()] for e in line[:l]]))
-		sents.append(tokenizer.decode(line[:l].long().numpy()))
+		sents.append(tokenizer.decode(line[:l].long().cpu().numpy()))
 	return sents
 
 def compute_bs_metrics(pred, act): #N, 50
@@ -30,6 +30,7 @@ def compute_bs_metrics(pred, act): #N, 50
 	for p,a in zip(pred, act):
 		p = [e.strip().split(" ", 2) for e in  p.strip().split(',')]
 		a = [e.strip().split(" ", 2) for e in  a.strip().split(',')]
+		print(a)
 		joint_total += len(a)
 		slot_total += 3*len(a)
 		joint_flag=1
@@ -46,21 +47,30 @@ def compute_bs_metrics(pred, act): #N, 50
 	return joint_acc, slot_acc
 
 
-#skip this function, use compute_bs_metrics for dialog act also
 def compute_da_metrics(pred, act): # begin from first triplet(no sos) in both
 	joint_matches =0
 	joint_total=0
 	slot_matches=0
-	slot_acc=0
+	slot_total=0
 
-	# change from here
-	temp = (act==pred)*mask
-	tp = (temp[:,:,0]*temp[:,:,1]*temp[:,:,2]).cpu().numpy().sum()
-	total = np.count_nonzero((act*mask).cpu().numpy())
+	for p,a in zip(pred, act):
+		p = [e.strip().split(" ", 2) for e in  p.strip().split(',')]
+		a = [e.strip().split(" ", 2) for e in  a.strip().split(',')]
+		print(a)
+		joint_total += len(a)
+		slot_total += 3*len(a)
+		joint_flag=1
+		for e1, e2 in zip(p, a):
+			if(e1==e2):
+				slot_matches+=1
+			else:
+				joint_flag=0
+		if(joint_flag):
+			joint_matches+=1
 
-	joint_acc = (3*tp)/total
-	slot_acc = temp.sum().cpu().numpy()/total
-	return (joint_acc*100, slot_acc*100), None
+	joint_acc = joint_matches/joint_total * 100
+	slot_acc = slot_matches/slot_total * 100
+	return joint_acc, slot_acc
 
 
 def obtain_TP_TN_FN_FP(pred, act, TP, TN, FN, FP, elem_wise=False):

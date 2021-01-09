@@ -260,8 +260,8 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 		both bs_pred, bs_act in total vocab indices now
 		"""
 
-		bs_joint_acc, bs_slot_acc = compute_bs_metrics(tokenizer.decode_batch(bs_pred.numpy()), tokenizer.decode_batch(bs_act.numpy()))
-		da_acc = compute_bs_metrics(tokenizer.decode_batch(da_pred.numpy()), tokenizer.decode_batch(da_act.numpy()))#similar pattern as bs, so using same metric function
+		bs_joint_acc, bs_slot_acc = compute_bs_metrics(tokenizer.decode_batch(bs_pred.cpu().numpy()), tokenizer.decode_batch(bs_act.cpu().numpy()))
+		da_acc = compute_da_metrics(tokenizer.decode_batch(da_pred.cpu().numpy()), tokenizer.decode_batch(da_act.cpu().numpy()))#similar pattern as bs, so using same metric function
 
 		indices = list(range(0, len(dataset)))
 		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
