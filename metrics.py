@@ -14,15 +14,16 @@ max_sent_len = 50
 def tensor_to_sents(data, tokenizer): #2d tensor or list of tensors!
 	# append eos at end if not generated
 	sents=[]
-	eos_index = Constants.EOS
+	eos_index = tokenizer.get_vocab()["EOS"] 
 	# idxtoword = {v:k for k,v in wordtoidx.items()}
 	for line in data:
 		l = (line==eos_index).nonzero()[0].item()+1 if (line==eos_index).any() else max_sent_len
 		# sents.append(' '.join([idxtoword[e.item()] for e in line[:l]]))
-		sents.append(tokenizer.decode(line[:l].long().cpu().numpy()))
+		sents.append(tokenizer.decode(line.long()[:l].tolist()))
 	return sents
 
 def compute_bs_metrics(pred, act): #N, 50
+# tokenizer.decode doesn't give sos/eos
 	joint_matches =0
 	joint_total=0
 	slot_matches=0
@@ -30,7 +31,6 @@ def compute_bs_metrics(pred, act): #N, 50
 	for p,a in zip(pred, act):
 		p = [e.strip().split(" ", 2) for e in  p.strip().split(',')]
 		a = [e.strip().split(" ", 2) for e in  a.strip().split(',')]
-		print(a)
 		joint_total += len(a)
 		slot_total += 3*len(a)
 		joint_flag=1
@@ -56,7 +56,6 @@ def compute_da_metrics(pred, act): # begin from first triplet(no sos) in both
 	for p,a in zip(pred, act):
 		p = [e.strip().split(" ", 2) for e in  p.strip().split(',')]
 		a = [e.strip().split(" ", 2) for e in  a.strip().split(',')]
-		print(a)
 		joint_total += len(a)
 		slot_total += 3*len(a)
 		joint_flag=1

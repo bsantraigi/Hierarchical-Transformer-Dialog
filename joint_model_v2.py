@@ -48,7 +48,7 @@ def postprocess(t): #pad after first eos - given (len, bs)
 		idx = (e==Constants.EOS).nonzero().flatten().tolist()
 		if len(idx)>0:
 			idx = idx[0]
-			t[i][idx+1:] = 0
+			t[i][idx+1:] = Constants.PAD
 	t = t.transpose(0,1)
 	return t
 
@@ -140,13 +140,13 @@ class Joint_model_v2(nn.Module):
 		max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
 		
 		src_sent = src.reshape(max_sent_len, -1, batch_size).transpose(0,1).reshape(-1, batch_size)
-		src_pad_mask_sent= (src_sent==0).transpose(0,1)
+		src_pad_mask_sent= (src_sent==Constants.PAD).transpose(0,1)
 		
 		# this mask depends on mdl, make dynamically
 		src_mask_sent = self.mask_func(max_dial_len*max_sent_len, max_sent_len)
 
 		src = src.reshape(max_sent_len, -1)
-		src_pad_mask = (src==0).transpose(0,1)
+		src_pad_mask = (src==Constants.PAD).transpose(0,1)
 
 		src = self.encoder(src) * math.sqrt(self.ninp)
 		src = self.pos_encoder(src)
@@ -167,14 +167,14 @@ class Joint_model_v2(nn.Module):
 		batch_size = tgt.shape[1]
 
 		tgt_mask = _gen_mask_sent(tgt.shape[0])		
-		tgt_pad_mask = (tgt==0).transpose(0,1)
+		tgt_pad_mask = (tgt==Constants.PAD).transpose(0,1)
 
 		memory = self.compute_encoder_output(src)
 
 		# Belief state decoder
 		# Belief state:  #[belief start, domain slot_name, .., belief end] - msl, bs
 		bs_mask = _gen_mask_sent(belief.shape[0])
-		bs_pad_mask = (belief==0).transpose(0,1)#bs, msl
+		bs_pad_mask = (belief==Constants.PAD).transpose(0,1)#bs, msl
 		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*max_triplets, bs, embed
 		belief = self.pos_encoder(belief)
 		belief_logits = self.bs_decoder(belief, memory, tgt_mask=bs_mask, tgt_key_padding_mask=bs_pad_mask) # length=50/n, bs, embed
@@ -182,7 +182,7 @@ class Joint_model_v2(nn.Module):
 
 		# Dialog Act decoder
 		da_mask = _gen_mask_sent(da.shape[0])
-		da_pad_mask = (da==0).transpose(0,1)
+		da_pad_mask = (da==Constants.PAD).transpose(0,1)
 		da = self.encoder(da)*math.sqrt(self.ninp) # msl+1, bs, embed
 		belief_pool = (belief*~bs_pad_mask.transpose(0,1).unsqueeze(-1)).sum(0)/(~bs_pad_mask).sum(1).unsqueeze(1) #take mean without pad
 		da = self.pos_encoder(da) + self.linear_1(belief_pool).unsqueeze(0)
@@ -201,7 +201,7 @@ class Joint_model_v2(nn.Module):
 	def decode_belief_state(self, belief, memory): # pass curr_belief - length, bs
 		length, batch_size = belief.shape
 		bs_mask = _gen_mask_sent(belief.shape[0])
-		bs_pad_mask = (belief==0).transpose(0,1)
+		bs_pad_mask = (belief==Constants.PAD).transpose(0,1)
 
 		belief = self.encoder(belief)*math.sqrt(self.ninp) # 2*triplets, bs, embed
 		belief = self.pos_encoder(belief)
@@ -213,7 +213,7 @@ class Joint_model_v2(nn.Module):
 	def decode_dialog_act(self, da, belief, bs_pad_mask, memory):
 		length, batch_size = da.shape
 		da_mask = _gen_mask_sent(da.shape[0])
-		da_pad_mask = (da==0).transpose(0,1)
+		da_pad_mask = (da==Constants.PAD).transpose(0,1)
 		da = self.encoder(da)*math.sqrt(self.ninp) # length , bs, embed
 
 		belief_pool = (belief*~bs_pad_mask.transpose(0,1).unsqueeze(-1)).sum(0)/(~bs_pad_mask).sum(1).unsqueeze(1) #take mean without pad
@@ -226,7 +226,7 @@ class Joint_model_v2(nn.Module):
 	def decode_response(self, memory, belief, da, da_pad_mask, tgt):
 		# tgt shape - (msl, batch_size, embed)
 		tgt_mask = _gen_mask_sent(tgt.shape[0])		
-		tgt_pad_mask = (tgt==0).transpose(0,1)
+		tgt_pad_mask = (tgt==Constants.PAD).transpose(0,1)
 		tgt = self.encoder(tgt) * math.sqrt(self.ninp)
 
 		da_pool = (da*~da_pad_mask.transpose(0,1).unsqueeze(-1)).sum(0)/(~da_pad_mask).sum(1).unsqueeze(1)
@@ -257,9 +257,9 @@ class Joint_model_v2(nn.Module):
 		belief = postprocess(belief)#pad after first eos
 		pred_belief = belief
 		if use_gt:
-			belief = _belief			
+			belief = _belief
 		bs_mask = _gen_mask_sent(belief.shape[0])
-		bs_pad_mask = (belief==0).transpose(0,1)
+		bs_pad_mask = (belief==Constants.PAD).transpose(0,1)
 		belief_memory = self.encoder(belief)*math.sqrt(self.ninp) # 50, bs, embed
 		belief_memory = self.pos_encoder(belief_memory)
 
@@ -291,8 +291,9 @@ class Joint_model_v2(nn.Module):
 		pred_da = da
 		# if use_gt: #don't use ground truth da
 		# 	da = _da
+		
 		da_mask = _gen_mask_sent(da.shape[0])
-		da_pad_mask = (da==0).transpose(0,1)
+		da_pad_mask = (da==Constants.PAD).transpose(0,1)
 		da_memory = self.encoder(da)*math.sqrt(self.ninp) # 3*max_triplets, bs, embed
 		da_memory = self.pos_encoder(da_memory)
 		# Generate response
