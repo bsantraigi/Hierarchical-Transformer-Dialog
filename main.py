@@ -367,9 +367,9 @@ def training(model, args, criterion, optimizer, scheduler, optuna_callback=None)
 		else:
 			scheduler.step()
 
-		if epoch < 8:
-			save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
-			continue
+		#if epoch < 8:
+		#	save_model(model, args, 'checkpoint.pt',train_loss, val_loss_ground, -1)
+		#	continue
 
 		# for every "val_epoch_freq" epochs, evaluate the metrics
 		if epoch%val_epoch_freq!=0:
@@ -598,22 +598,22 @@ def run(args, optuna_callback=None):
 
 	print('Total number of trainable parameters: ', sum(p.numel() for p in model.parameters() if p.requires_grad)/float(1000000), 'M')
 		
-	optimizer = torch.optim.Adam(model.parameters(), lr= 0.000125, betas=(0.9, 0.98), eps=1e-9)
+	optimizer = torch.optim.Adam(model.parameters(), lr= 0.0001, betas=(0.9, 0.98), eps=1e-9)
 	scheduler = torch.optim.lr_scheduler.StepLR(optimizer,step_size=4, gamma=0.9)
 
 	logger.debug('\n\n\n=====>\n')
 
-	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
-	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
-	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
+	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint.pt')
+	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	logger.debug('Testing model\n')
 	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
 	# logger.debug('Test critiera: {:0.3f}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# To get greedy, beam(2,3,5) scores for val, test 
-	# test_split('val', model, args, criterion)
-	# test_split('test', model, args, criterion)
+	test_split('val', model, args, criterion)
+	test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	val_criteria = val_bleu+0.5*(val_matches+val_successes)
