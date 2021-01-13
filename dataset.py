@@ -213,7 +213,10 @@ def build_vocab_freqbased(V_PATH="./data/mwoz-bpe.tokenizer.json", non_delex=Fal
 	Constants.SOS = tokenizer.get_vocab()["SOS"]
 	Constants.EOS = tokenizer.get_vocab()["EOS"]
 	Constants.UNK = tokenizer.get_vocab()["UNK"]
-	
+	print("PAD index is: ", Constants.PAD)
+	print("SOS index is: ", Constants.SOS)
+	print("EOS index is: ", Constants.EOS)
+	print("UNK index is: ", Constants.UNK)
 	return tokenizer
 
 
