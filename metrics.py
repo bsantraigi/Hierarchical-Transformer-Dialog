@@ -33,14 +33,15 @@ def compute_bs_metrics(pred, act): #N, 50
 		a = [e.strip().split(" ", 2) for e in  a.strip().split(',')]
 		joint_total += len(a)
 		slot_total += 3*len(a)
-		joint_flag=1
-		for e1, e2 in zip(p, a):
-			if(e1==e2):
-				slot_matches+=1
-			else:
-				joint_flag=0
-		if(joint_flag):
-			joint_matches+=1
+		for p_e, a_e in zip(p, a):
+			joint_flag=1
+			for e1, e2 in zip(p_e, a_e):
+				if(e1==e2):
+					slot_matches+=1
+				else:
+					joint_flag=0
+			if(joint_flag):
+				joint_matches+=1
 
 	joint_acc = joint_matches/joint_total * 100
 	slot_acc = slot_matches/slot_total * 100
@@ -58,14 +59,15 @@ def compute_da_metrics(pred, act): # begin from first triplet(no sos) in both
 		a = [e.strip().split(" ", 2) for e in  a.strip().split(',')]
 		joint_total += len(a)
 		slot_total += 3*len(a)
-		joint_flag=1
-		for e1, e2 in zip(p, a):
-			if(e1==e2):
-				slot_matches+=1
-			else:
-				joint_flag=0
-		if(joint_flag):
-			joint_matches+=1
+		for p_e, a_e in zip(p, a):
+			joint_flag=1
+			for e1, e2 in zip(p_e, a_e):
+				if(e1==e2):
+					slot_matches+=1
+				else:
+					joint_flag=0
+			if(joint_flag):
+				joint_matches+=1
 
 	joint_acc = joint_matches/joint_total * 100
 	slot_acc = slot_matches/slot_total * 100
