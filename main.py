@@ -261,7 +261,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 		"""
 
 		bs_joint_acc, bs_slot_acc = compute_bs_metrics(tokenizer.decode_batch(bs_pred.cpu().numpy()), tokenizer.decode_batch(bs_act.cpu().numpy()))
-		da_acc = compute_da_metrics(tokenizer.decode_batch(da_pred.cpu().numpy()), tokenizer.decode_batch(da_act.cpu().numpy()))#similar pattern as bs, so using same metric function
+		da_acc, hieract_metrics = compute_da_metrics(tokenizer.decode_batch(da_pred.cpu().numpy()), tokenizer.decode_batch(da_act.cpu().numpy()))#similar pattern as bs, so using same metric function
 
 		indices = list(range(0, len(dataset)))
 		# indices = list(range(0, args.batch_size)) # uncomment this to run for one batch
@@ -328,8 +328,8 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 
 	logger.debug('==>{}\tBelief state Joint acc: {:0.2f}\tSlot acc: {:0.2f}'.format(split,  bs_joint_acc, bs_slot_acc))
 
-	logger.debug('==>{}\tDialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f}'.format(split, da_acc[0], da_acc[1]))
-	# logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f} || HDSA precision: {:0.2f}  recall {:0.2f}  f1_score: {:0.2f}'.format(split, da_acc[0], da_acc[1], da_hdsa_metrics[0], da_hdsa_metrics[1], da_hdsa_metrics[2]))
+	# logger.debug('==>{}\tDialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f}'.format(split, da_acc[0], da_acc[1]))
+	logger.debug('==>{} Dialog Act: Joint acc: {:0.2f}  Slot acc: {:0.2f} || HDSA precision: {:0.2f}  recall {:0.2f}  f1_score: {:0.2f}'.format(split, da_acc[0], da_acc[1], hieract_metrics[0], hieract_metrics[1], hieract_metrics[2]))
 
 	criteria = bleu_score+0.5*(matches+successes)
 	logger.debug('==>{}\tBleu: {:0.2f}\tF1-Entity {:0.2f}\tInform {:0.2f}\tSuccesses: {:0.2f}\tCriteria: {:0.2f}'.format( split, bleu_score, f1_entity, matches, successes, criteria ))
@@ -608,16 +608,16 @@ def run(args, optuna_callback=None):
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	logger.debug('Testing model\n')
-	# _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-	# logger.debug('Test critiera: {:0.3f}'.format(test_bleu+0.5*(test_matches+test_successes)))
+	_,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+	logger.debug('Test critiera: {:0.3f}'.format(test_bleu+0.5*(test_matches+test_successes)))
 
 	# To get greedy, beam(2,3,5) scores for val, test 
-	test_split('val', model, args, criterion)
-	test_split('test', model, args, criterion)
+	# test_split('val', model, args, criterion)
+	# test_split('test', model, args, criterion)
 
-	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
-	val_criteria = val_bleu+0.5*(val_matches+val_successes)
-	return val_criteria
+	# _,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
+	# val_criteria = val_bleu+0.5*(val_matches+val_successes)
+	# return val_criteria
 
 
 if __name__ == '__main__':

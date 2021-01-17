@@ -47,14 +47,29 @@ def compute_bs_metrics(pred, act): #N, 50
 	slot_acc = slot_matches/slot_total * 100
 	return joint_acc, slot_acc
 
+def generate_hieract(act): # input - N, triplets, 3
+	hieract = np.zeros((44))
+	for e in act: # -3 to remove pad,sos,eos
+		d = Constants.V_domains_wtoi.get(e[0], -1)
+		a = Constants.V_actions_wtoi.get(e[1], -1)
+		s = Constants.V_slots_wtoi.get(e[2], -1)
+		if d==-1 or a==-1 or s==-1:
+			continue
+		hieract[d]=1
+		hieract[len(Constants.domains)+a]=1
+		hieract[len(Constants.domains)+len(Constants.functions)+s]=1
+	return hieract
 
 def compute_da_metrics(pred, act): # begin from first triplet(no sos) in both
 	joint_matches =0
 	joint_total=0
 	slot_matches=0
 	slot_total=0
+	bs = len(pred)
+	pred_hieract = np.zeros((bs, 44))
+	act_hieract =  np.zeros((bs, 44))
 
-	for p,a in zip(pred, act):
+	for idx, (p,a) in enumerate(zip(pred, act)):
 		p = [e.strip().split(" ", 2) for e in  p.strip().split(',')]
 		a = [e.strip().split(" ", 2) for e in  a.strip().split(',')]
 		joint_total += len(a)
@@ -68,10 +83,13 @@ def compute_da_metrics(pred, act): # begin from first triplet(no sos) in both
 					joint_flag=0
 			if(joint_flag):
 				joint_matches+=1
+		pred_hieract[idx] = generate_hieract(p)
+		act_hieract[idx] = generate_hieract(a)
 
+	precision, recall, f1_score = compute_metrics_binary(pred_hieract.reshape(-1), act_hieract.reshape(-1))
 	joint_acc = joint_matches/joint_total * 100
 	slot_acc = slot_matches/slot_total * 100
-	return joint_acc, slot_acc
+	return (joint_acc, slot_acc), (precision, recall, f1_score)
 
 
 def obtain_TP_TN_FN_FP(pred, act, TP, TN, FN, FP, elem_wise=False):

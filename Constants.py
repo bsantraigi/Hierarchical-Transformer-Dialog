@@ -18,9 +18,9 @@ functions = ['book', 'inform', 'none', 'recommend', 'request', 'select', 'sorry'
 arguments = ['address', 'area', 'arriveby', 'choice', 'day', 'department', 'departure', 'destination', 'duration', 'food', 'id', 'internet', 'leaveat', 'name', 'none', 'parking', 'people', 'phone', 'postcode', 'price', 'pricerange', 'reference', 'stars', 'stay', 'time', 'trainid', 'type']
 
 
-V_domains = ['PAD', 'SOS', 'EOS']+ domains
-V_slots = ['PAD', 'SOS', 'EOS']+ arguments
-V_actions = ['PAD', 'SOS', 'EOS']+ functions
+V_domains =  domains
+V_slots = arguments
+V_actions = functions
 V_domains_wtoi = dict((el,i) for i,el in enumerate(V_domains))
 V_slots_wtoi = dict((el,i) for i,el in enumerate(V_slots))
 V_actions_wtoi = dict((el,i) for i,el in enumerate(V_actions))
