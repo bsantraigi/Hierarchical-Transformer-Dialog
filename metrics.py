@@ -89,7 +89,7 @@ def compute_da_metrics(pred, act): # begin from first triplet(no sos) in both
 	precision, recall, f1_score = compute_metrics_binary(pred_hieract.reshape(-1), act_hieract.reshape(-1))
 	joint_acc = joint_matches/joint_total * 100
 	slot_acc = slot_matches/slot_total * 100
-	return (joint_acc, slot_acc), (precision, recall, f1_score)
+	return (joint_acc, slot_acc), (precision*100, recall*100, f1_score*100)
 
 
 def obtain_TP_TN_FN_FP(pred, act, TP, TN, FN, FP, elem_wise=False):

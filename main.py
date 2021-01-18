@@ -171,7 +171,7 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 
 def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , batch_size, criterion, split, method='beam', beam_size=None):
 	batch_size = args.batch_size
-	use_gt = True
+	use_gt = True #set to false generally
 
 	logger.debug('=========== {} search {} ==========='.format(method.upper(), split.upper()))
 	if method=='beam':
@@ -198,17 +198,17 @@ def evaluate(model, args, dataset, dataset_counter, dataset_bs, dataset_da , bat
 			if method=='beam':
 				if isinstance(model, nn.DataParallel):
 					# gives list of sentences itself
-					bs_output, da_output = model.module.greedy_search_bsda(data, bs, None,  batch_size_curr, use_gt=use_gt)
+					bs_output, da_output = model.module.greedy_search_bsda(data, bs, da,  batch_size_curr, use_gt=use_gt)
 					output = model.module.translate_batch(data, bs_output, da_output, beam_size, batch_size_curr)
 				else:
-					bs_output, da_output = model.greedy_search_bsda(data, bs, None, batch_size_curr, use_gt =use_gt)
+					bs_output, da_output = model.greedy_search_bsda(data, bs, da, batch_size_curr, use_gt =use_gt)
 					output = model.translate_batch(data, bs_output, da_output, beam_size , batch_size_curr)
 
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, None, bs, da, use_gt = use_gt) # .module. if using dataparallel
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.module.greedy_search(data,  batch_size_curr, bs, da, use_gt = use_gt) # .module. if using dataparallel
 				else: # da_output_i in individal vocab indices
-					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, None, bs, da, use_gt= use_gt)
+					output, output_max, bs_logits, bs_output, da_logits, da_output = model.greedy_search(data, batch_size_curr, bs, da, use_gt= use_gt)
 
 			if torch.is_tensor(output): # greedy search
 				# print(bs_logits.shape, bs.shape) - torch.Size([49, 32, 1515]) torch.Size([50, 32]) - da also same

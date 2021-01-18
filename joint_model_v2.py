@@ -256,8 +256,8 @@ class Joint_model_v2(nn.Module):
 
 		belief = postprocess(belief)#pad after first eos
 		pred_belief = belief
-		if use_gt:
-			belief = _belief
+		# if use_gt:
+		# 	belief = _belief
 		bs_mask = _gen_mask_sent(belief.shape[0])
 		bs_pad_mask = (belief==Constants.PAD).transpose(0,1)
 		belief_memory = self.encoder(belief)*math.sqrt(self.ninp) # 50, bs, embed
@@ -280,17 +280,17 @@ class Joint_model_v2(nn.Module):
 			return pred_belief, pred_da
 
 
-	def greedy_search(self, src, batch_size, imaps, _belief, _da, use_gt=False):
+	def greedy_search(self, src, batch_size, _belief, _da, use_gt=False):
 		# Index 2 is SOS, index 3 is EOS
 		# if use_gt is True, _belief, _da(ground truth) are used for inference in later decoders
 		eos_tokens = Constants.EOS*torch.ones(1, batch_size, device=device).long()
 		tgt = Constants.SOS*torch.ones(1, batch_size , device=device).long()
 
-		belief_memory, memory, belief_logits, da_logits, pred_belief, da = self.greedy_search_bsda(src, _belief, _da, batch_size, True, use_gt)
+		belief_memory, memory, belief_logits, da_logits, pred_belief, da = self.greedy_search_bsda(src, _belief, _da, batch_size, True, use_gt=False)
 
 		pred_da = da
-		# if use_gt: #don't use ground truth da
-		# 	da = _da
+		if use_gt: #to use ground truth da
+			da = _da
 		
 		da_mask = _gen_mask_sent(da.shape[0])
 		da_pad_mask = (da==Constants.PAD).transpose(0,1)
