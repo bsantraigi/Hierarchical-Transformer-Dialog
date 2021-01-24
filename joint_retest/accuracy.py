@@ -89,8 +89,8 @@ def joint_accuracy(dialogue_target,dialogue_pred,d_c = True,type2_c = True):
                 else:
                     joint_acc += 1
                     join_flag = True
-        if join_flag == False:
-            print(str(turn_target) + " ===> " + str(turn_pred))
+#         if join_flag == False:
+#             print(str(turn_target) + " ===> " + str(turn_pred))
 
         num_turns += 1
 
@@ -118,7 +118,9 @@ def slot_accuracy(dialogue_target,dialogue_pred):
     turn_pred = new_turn_pred
     
     slot_pred , slot_tgt = get_slots(turn_pred,turn_target)
+#     print(set(slot_tgt), " ===> ", set(slot_pred))
     slot_flag = False
+#     if set(slot_tgt) == set(slot_pred):
     if set(slot_tgt) == set(slot_pred[:len(slot_tgt)]):            #Please review this part
             slot_acc += 1
             slot_flag = True
@@ -171,9 +173,9 @@ def get_slots(turn_pred,turn_target):
 #     print(turn_pred, turn_target)
     pred_belief_jason = []
     target_belief_jason = []
-
+    
     for pred in turn_pred:
-        if pred in ['',' ','  ']:
+        if pred in ['',' ','  '] or len(pred.split()) < 3:
             continue
         if len(pred.split())==1 or len(pred.split())==0:
             continue
@@ -191,7 +193,7 @@ def get_slots(turn_pred,turn_target):
         slot, val = fix_mismatch_jason(slot, val)
         pred_belief_jason.append('{}'.format(slot))
     for tgt in turn_target:
-        if tgt in ['',' ', '  ']:
+        if tgt in ['',' ', '  '] or len(tgt.split()) < 3:
             continue
         domain = tgt.split()[0]
         if 'book' in tgt:
