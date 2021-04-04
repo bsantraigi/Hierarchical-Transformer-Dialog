@@ -159,7 +159,7 @@ def build_vocab_freqbased(load): # [ no of turns , src, tgt, act_vecs, hierarchi
 		if k[0]=='[' and k[-1]==']' and '[' not in k[1:]:
 			idxtoword[i]=k
 			i += 1
-	for idx, (k,v) in enumerate(c.most_common(1500)):
+	for idx, (k,v) in enumerate(c.most_common(3000)):
 		if k not in idxtoword.values():
 			idxtoword[i] = k
 			i += 1

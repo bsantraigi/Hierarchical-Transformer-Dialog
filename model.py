@@ -180,13 +180,13 @@ class Transformer(nn.Module):
         tgt_pad_mask = (tgt==0).transpose(0,1)
 
         src = self.encoder(src) * math.sqrt(self.ninp)
-        src = self.pos_encoder(src)
+        #src = self.pos_encoder(src)
 
         # encoder 1
-        if self.ablation=='SET' or self.ablation=='HIER':
-            memory_inter = self.transformer_encoder(src, src_mask, src_pad_mask)
-        elif self.ablation=='MAT':
-            memory_inter = src
+#         if self.ablation=='SET' or self.ablation=='HIER':
+#             memory_inter = self.transformer_encoder(src, src_mask, src_pad_mask)
+#         elif self.ablation=='MAT':
+        memory_inter = src
 #         check_nan(memory_inter, 'memory_inter')
         memory_inter = memory_inter.view(max_sent_len, -1, batch_size, self.ninp).transpose(0,1).reshape(-1, batch_size, self.ninp)
 
