@@ -92,6 +92,58 @@ def data_gen(dataset, batch_size, i, wordtoidx):
     
     return seq_tensor.long(), target_tensor.long(), label_tensor.long()
 
+# NEW DATASET
+from torch.utils.data import Dataset, DataLoader
+class MWDataset(Dataset):
+    """An abstract class representing a Dataset.
+
+    All other datasets should subclass it. All subclasses should override
+    ``__len__``, that provides the size of the dataset, and ``__getitem__``,
+    supporting integer indexing in range from 0 to len(self) exclusive.
+    """
+    def __init__(self, dataset, wordtoidx):
+        super(MWDataset, self).__init__()
+        self.data = dataset
+        self.wordtoidx = wordtoidx
+    
+#     def _preprocess(self, C, R):
+#         # should be on cpu to support multiple workers in dataloader
+#         c = torch.tensor(tokenizer.encode("[CLS] " + C).ids)[:self.max_len]
+#         r = torch.tensor(tokenizer.encode("[CLS] " + R).ids)[:self.max_len]
+#         return c,r
+
+    def __getitem__(self, index):
+        max_dial_len = len(dataset[index])-1
+        vectorised_seq = []
+
+        d = dataset[index]
+        vectorised_seq.append([[wordtoidx.get(word, 1) for word in tokenize_en(sent)] for sent in d])
+
+        seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in vectorised_seq])
+        seq_tensor = torch.zeros(max_dial_len, max_sent_len, device=device)
+
+        target_tensor = torch.zeros(batch_size, max_sent_len, device=device)
+        label_tensor = torch.zeros(batch_size, max_sent_len, device=device)
+
+        for idx,(seq, seqlen) in enumerate(zip(vectorised_seq, seq_lengths)):
+            for i in range(seqlen-1):
+                seq_tensor[idx, i, :len(seq[i])] = torch.LongTensor(seq[i])
+            target_tensor[idx, :len(seq[seqlen-1])] = torch.LongTensor(seq[seqlen-1]) # last sentence in dialog
+            label_tensor[idx, :len(seq[seqlen-1])-1] = torch.LongTensor(seq[seqlen-1][1:]) # last sentence in dialog from first word
+        # changing labels to have SOS now, [1:]
+
+        seq_tensor = seq_tensor.transpose(1,2).reshape(batch_size, -1).transpose(0,1)
+        # seq_tensor - (msl*mdl , bs)
+
+        target_tensor = target_tensor.transpose(0,1)
+        label_tensor = label_tensor.transpose(0,1)
+
+    #     print(seq_tensor.size(), target_tensor.size())
+
+        return seq_tensor.long(), target_tensor.long(), label_tensor.long()
+
+    def __len__(self):
+        return len(self.data)
 
 
 def data_loader(dataset, dataset_counter, batch_size, wordtoidx): 
