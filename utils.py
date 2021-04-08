@@ -112,39 +112,41 @@ class MWDataset(Dataset):
 #         r = torch.tensor(tokenizer.encode("[CLS] " + R).ids)[:self.max_len]
 #         return c,r
 
-    def __getitem__(self, index):
-        max_dial_len = len(dataset[index])-1
-        vectorised_seq = []
+    def __getitem__(self, index, max_ctx_len=250, max_trg_len=70):
+        dataset = self.data
+        wordtoidx = self.wordtoidx
 
         d = dataset[index]
-        vectorised_seq.append([[wordtoidx.get(word, 1) for word in tokenize_en(sent)] for sent in d])
+        vectorised_seq = [[wordtoidx.get(word, 1) for word in tokenize_en(sent)] for sent in d]
+        *vectorised_seq, trg_seq = vectorised_seq
 
-        seq_lengths = torch.LongTensor([min(len(seq), max_sent_len) for seq in vectorised_seq])
-        seq_tensor = torch.zeros(max_dial_len, max_sent_len, device=device)
+        seq_tensor = torch.zeros(max_ctx_len, device=torch.device("cpu"))
+        x, total = 0, 0
+        for s in reversed(vectorised_seq):
+            if (len(s) + total) < max_ctx_len:
+                x += 1
+                total += len(s)
+            else:
+                break
 
-        target_tensor = torch.zeros(batch_size, max_sent_len, device=device)
-        label_tensor = torch.zeros(batch_size, max_sent_len, device=device)
+        vectorised_seq = [w for s in vectorised_seq[-x:] for w in s]
+        # print(len(vectorised_seq), total, len(s))
+        assert len(vectorised_seq) == total
+        seq_tensor[:len(vectorised_seq)] = torch.tensor(vectorised_seq, device=torch.device("cpu"))
 
-        for idx,(seq, seqlen) in enumerate(zip(vectorised_seq, seq_lengths)):
-            for i in range(seqlen-1):
-                seq_tensor[idx, i, :len(seq[i])] = torch.LongTensor(seq[i])
-            target_tensor[idx, :len(seq[seqlen-1])] = torch.LongTensor(seq[seqlen-1]) # last sentence in dialog
-            label_tensor[idx, :len(seq[seqlen-1])-1] = torch.LongTensor(seq[seqlen-1][1:]) # last sentence in dialog from first word
-        # changing labels to have SOS now, [1:]
+        # seq_lengths = torch.LongTensor([len(vectorised_seq)])
 
-        seq_tensor = seq_tensor.transpose(1,2).reshape(batch_size, -1).transpose(0,1)
-        # seq_tensor - (msl*mdl , bs)
+        target_tensor = torch.zeros(max_trg_len, device=torch.device("cpu"))
+        label_tensor = torch.zeros(max_trg_len, device=torch.device("cpu"))
 
-        target_tensor = target_tensor.transpose(0,1)
-        label_tensor = label_tensor.transpose(0,1)
-
-    #     print(seq_tensor.size(), target_tensor.size())
+        tl = min(len(trg_seq), max_trg_len)
+        target_tensor[:tl] = torch.tensor(trg_seq[:tl], device=torch.device("cpu"))
+        label_tensor[:(tl - 1)] = torch.tensor(trg_seq[1:tl], device=torch.device("cpu"))
 
         return seq_tensor.long(), target_tensor.long(), label_tensor.long()
 
     def __len__(self):
         return len(self.data)
-
 
 def data_loader(dataset, dataset_counter, batch_size, wordtoidx): 
     # return batches according to dialog len, -> all similar at once

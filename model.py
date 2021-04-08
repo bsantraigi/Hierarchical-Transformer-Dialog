@@ -155,76 +155,62 @@ class Transformer(nn.Module):
         self.decoder.bias.data.zero_()
         self.decoder.weight.data.uniform_(-initrange, initrange)
 
-    
-    def forward(self, src, tgt, src_pad_mask=None, tgt_pad_mask=None):
-        max_sent_len = 50
-        src_mask = torch.zeros(max_sent_len,max_sent_len, device=device)
-        tgt_mask = _gen_mask_sent(tgt.shape[0])        
-        batch_size = tgt.shape[1]
-        
-        max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
-        
-        src_sent = src.reshape(max_sent_len, -1, batch_size).transpose(0,1).reshape(-1, batch_size)
-        src_pad_mask_sent= (src_sent==0).transpose(0,1)
-        
-        # this mask depends on mdl, make dynamically
-        # for SET
-        # src_mask_sent = _gen_mask(max_dial_len*max_sent_len, max_sent_len) 
-        # for HIER
-        # src_mask_sent = _gen_mask_hierarchical(max_dial_len*max_sent_len, max_sent_len) # this one is bidirectional 
-        src_mask_sent = self.mask_func(max_dial_len*max_sent_len, max_sent_len)
-
-        src = src.reshape(max_sent_len, -1)
-
-        src_pad_mask = (src==0).transpose(0,1)
-        tgt_pad_mask = (tgt==0).transpose(0,1)
-
+    def forward_encoder(self, src):
+        src = src.transpose(0, 1)
+        # print(src.shape, tgt.shape)
+        max_sent_len = src.shape[0]
+        # src_mask = torch.zeros(max_sent_len, max_sent_len, device=device)
+        src_pad_mask_sent = (src == 0).transpose(0, 1)
+        src_mask_sent = self.mask_func(max_sent_len, max_sent_len)
+        src_pad_mask = (src == 0).transpose(0, 1)
         src = self.encoder(src) * math.sqrt(self.ninp)
-        #src = self.pos_encoder(src)
-
-        # encoder 1
-#         if self.ablation=='SET' or self.ablation=='HIER':
-#             memory_inter = self.transformer_encoder(src, src_mask, src_pad_mask)
-#         elif self.ablation=='MAT':
         memory_inter = src
-#         check_nan(memory_inter, 'memory_inter')
-        memory_inter = memory_inter.view(max_sent_len, -1, batch_size, self.ninp).transpose(0,1).reshape(-1, batch_size, self.ninp)
-
+        # memory_inter = memory_inter.view(max_sent_len, -1, batch_size, self.ninp).transpose(0,1).reshape(-1, batch_size, self.ninp)
         # encoder 2
         memory_inter = self.pos_encoder(memory_inter)
         memory = self.transformer_encoder_sent(memory_inter, src_mask_sent, src_pad_mask_sent)
+        return memory
 
-        # check_nan(memory, 'memory')
-        
+    def foward_decoder(self, memory, tgt):
+        # tgt preprocess
+        tgt = tgt.transpose(0, 1)
+        tgt_mask = _gen_mask_sent(tgt.shape[0])
+        batch_size = tgt.shape[1]
+        tgt_pad_mask = (tgt == 0).transpose(0, 1)
         # decoder
         tgt = self.encoder(tgt) * math.sqrt(self.ninp)
         tgt = self.pos_encoder(tgt)
         output = self.transformer_decoder(tgt, memory, tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
-        
         # check_nan(output, 'output')
-
         output = self.decoder(output)
         return output
 
-    def greedy_search(self, src, batch_size):
-        max_sent_len = 50
-        max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
-        tgt = 2*torch.ones(1, batch_size , device=device).long()
+    def forward(self, src, tgt, src_pad_mask=None, tgt_pad_mask=None):
+        memory = self.forward_encoder(src)
+        output = self.foward_decoder(memory, tgt)
+        return output
 
+    def greedy_search(self, src, batch_size):
+        max_sent_len = 70
+        # max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
+        tgt = 2*torch.ones(batch_size, 1, device=device).long()
+
+        memory = self.forward_encoder(src)
         for i in range(1, max_sent_len+1):
-            output = self.forward(src, tgt)[-1,:,:].unsqueeze(0)
+            # output = self.forward(src, tgt)[-1, :, :].unsqueeze(0)
+            output = self.foward_decoder(memory, tgt)[-1, :, :].unsqueeze(0)
+
             # print('output ', output.shape) # i,bs,vocab
             if i==1:
                 logits = output
             else:
                 logits = torch.cat([logits, output], dim=0)
             output_max = torch.max(output, dim=2)[1]
-            tgt = torch.cat([tgt, output_max], dim=0)
+            tgt = torch.cat([tgt, output_max.transpose(0, 1)], dim=1)
 
         tgt = tgt[1: , :]
         return logits
 
-        
     def translate_batch(self, src, n_bm, batch_size): # , src_pad_mask, tgt_pad_mask
         # adopted from HDSA_Dialog
         device = src.device

@@ -27,7 +27,7 @@ from collections import OrderedDict
 from evaluate import evaluateModel
 import Constants
 import argparse
-
+import psutil
 
 if not os.path.isdir('running'):
 	os.makedirs('running')
@@ -59,9 +59,12 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	
 #     if torch.cuda.is_available():
 #         stat_cuda('before epoch')
-		
 
-	for i, (data, targets, labels) in tqdm(enumerate(data_loader(train, train_counter, batch_size, wordtoidx)), total=nbatches):
+	# for i, (data, targets, labels) in tqdm(enumerate(data_loader(train, train_counter, batch_size, wordtoidx)), total=nbatches):
+	for i, (data, targets, labels) in enumerate(tqdm(DataLoader(train, shuffle=True, batch_size=batch_size, num_workers=cores))):
+		data = data.to(device)
+		targets = targets.to(device)
+		labels = labels.to(device)
 
 		batch_size_curr = data.shape[1]
 		optimizer.zero_grad()
@@ -84,7 +87,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 		# print(loss.item())
 
 		elapsed = time.time()-start_time
-		
+		break
 
 	total_loss /= len(train)
 	logger.debug('==> Epoch {}, Train \tLoss: {:0.4f}\tTime taken: {:0.1f}s'.format(epoch,  total_loss, elapsed))
@@ -108,9 +111,13 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 
 	# .module. if using dataparallel
 	with torch.no_grad():
-		for i, (data, targets, labels) in tqdm(enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)), total=len(dataset)//batch_size):
+		# for i, (data, targets, labels) in tqdm(enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)), total=len(dataset)//batch_size):
+		for i, (data, targets, labels) in enumerate(tqdm(DataLoader(dataset, batch_size=batch_size, num_workers=cores))):
+			data = data.to(device)
+			targets = targets.to(device)
+			labels = labels.to(device)
 
-			batch_size_curr = targets.shape[1]
+			batch_size_curr = targets.shape[0]
 
 			if method=='beam':
 				if isinstance(model, nn.DataParallel):
@@ -128,7 +135,7 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 			
 
 			if torch.is_tensor(output): # greedy search
-				cur_loss = criterion(output.view(-1, ntokens), labels.reshape(-1)).item()*batch_size_curr
+				cur_loss = criterion(output.view(-1, ntokens), labels.transpose(0, 1).reshape(-1)).item()*batch_size_curr
 				total_loss += cur_loss
 
 				output = torch.max(output, dim=2)[1] # msl, batchsize
@@ -136,20 +143,20 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 				# 	print(output[:, s],'\n', labels[:, s], '\n\n')
 				# exit()
 
-				output_max = post_process(output.transpose(0,1))				
+				output_max = post_process(output.transpose(0,1))
 				if i==0:
 					hyp = output_max
 					ref = targets.transpose(0,1)
 				else:
 					hyp = torch.cat((hyp, output_max), dim=0)
-					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
+					ref= torch.cat((ref, targets.transpose(0, 1)), dim=0)
 			else: # beam search
 				if i==0:
 					hyp = [torch.tensor(l) for l in output]
-					ref = targets.transpose(0,1)
+					ref = targets.transpose(0, 1)
 				else:
 					hyp.extend([torch.tensor(l) for l in output])
-					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
+					ref= torch.cat((ref, targets.transpose(0, 1)), dim=0)
 
 		indices = list(range(0, len(dataset)))
 		# indices = list(range(0, batch_size)) #uncomment this to run for one batch
@@ -220,7 +227,12 @@ def get_loss_nograd(model, epoch, batch_size, criterion, split): # losses per ba
 	dataset, dataset_counter, _ = name_to_dataset(split)	
 	
 	with torch.no_grad():
-		for i, (data, targets, labels) in enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)):
+		#for i, (data, targets, labels) in enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)):
+		for i, (data, targets, labels) in enumerate(tqdm(DataLoader(dataset, batch_size=batch_size, num_workers=cores))):
+			data = data.to(device)
+			targets = targets.to(device)
+			labels = labels.to(device)
+
 			batch_size_curr = data.shape[1]
 			output = model(data, targets)
 			label_pad_mask = (labels!=0).transpose(0,1)   			
@@ -462,7 +474,10 @@ def run(args, optuna_callback=None):
 		torch.backends.cudnn.benchmark = True
 		torch.set_default_tensor_type('torch.cuda.FloatTensor')
 		# using data parallel
-		model = nn.DataParallel(model, device_ids=[0,1], dim=1)
+		if torch.cuda.device_count() > 1:
+			model = nn.DataParallel(model, device_ids=[0, 1], dim=1)
+		else:
+			model = nn.DataParallel(model, device_ids=[0], dim=1)
 		print('putting model on cuda')
 		model.to(device)
 		criterion.to(device)
@@ -476,7 +491,7 @@ def run(args, optuna_callback=None):
 	logger.debug('\n\n\n=====>\n')
 
 	# best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
-	_ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+	# _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 	best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt') #load model with best criteria
 
 	method = 'greedy'
@@ -500,17 +515,49 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
 
-
-train, train_counter, _ , train_dialog_files, train_responses  = gen_dataset_with_acts('train')
-val, val_counter, _, val_dialog_files, val_responses = gen_dataset_with_acts('val')
-test, test_counter, _ , test_dialog_files, test_responses = gen_dataset_with_acts('test')
-
 # top 1500 words
 idxtoword, wordtoidx = build_vocab_freqbased(load=False)
 vocab_size = len(idxtoword)
 ntokens = vocab_size
 # print(wordtoidx)
 print('length of vocab: ', vocab_size)
+
+
+# cores = max(2, psutil.cpu_count(logical=True))
+cores = 0
+
+train, train_counter, _ , train_dialog_files, train_responses  = gen_dataset_with_acts('train')
+val, val_counter, _, val_dialog_files, val_responses = gen_dataset_with_acts('val')
+test, test_counter, _ , test_dialog_files, test_responses = gen_dataset_with_acts('test')
+
+train = MWDataset(train, wordtoidx)
+val = MWDataset(val, wordtoidx)
+test = MWDataset(test, wordtoidx)
+
+# dataloader_train = DataLoader(train, shuffle=True, batch_size=128, num_workers=cores)
+# dataloader_val = DataLoader(val, batch_size=128, num_workers=cores)
+# dataloader_test = DataLoader(test, batch_size=128, num_workers=cores)
+
+# a, b, c = mw[1000]
+# def s(l, idxtoword):
+# 	return [idxtoword[w] for w in l.tolist() if w != 0]
+# print(s(a, idxtoword))
+# for w in range(1, 3 + cores):
+#     dataloader_train = DataLoader(train, shuffle=True, batch_size=128, num_workers=w)
+#     K = 100
+#     tic = time.perf_counter()
+#
+#     for i, batch in enumerate(dataloader_train):
+#         c,r,x = batch
+#         c = c.to(device)
+#         r = r.to(device)
+#         if i >= K:
+#             break
+#
+#     toc = time.perf_counter()
+#
+#     print(f"Avg batch creation time for {w} workers {(toc - tic)/K:0.4f} seconds")
+# exit(0)
 
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
@@ -530,7 +577,7 @@ if __name__ == "__main__":
 
 	parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout")
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
-	parser.add_argument("-e", "--epochs", default=10, type=int, help = "Give number of epochs")
+	parser.add_argument("-e", "--epochs", default=1, type=int, help = "Give number of epochs")
 	parser.add_argument("-model", "--model_type", default="HIER", help="Give model name one of [SET, HIER, MAT]")
 
 	args = parser.parse_args() 
