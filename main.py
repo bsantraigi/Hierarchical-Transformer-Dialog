@@ -147,10 +147,10 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
                 output_max = post_process(output.transpose(0, 1))
                 if i == 0:
                     hyp = output_max
-                    ref = targets.transpose(0, 1)
+                    ref = targets
                 else:
                     hyp = torch.cat((hyp, output_max), dim=0)
-                    ref = torch.cat((ref, targets.transpose(0, 1)), dim=0)
+                    ref = torch.cat((ref, targets), dim=0)
             else:  # beam search
                 if i == 0:
                     hyp = [torch.tensor(l) for l in output]
