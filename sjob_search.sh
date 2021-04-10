@@ -4,7 +4,7 @@
 #SBATCH -o logs/slurm_%j.log          #Name of stdout output file(--output)
 #SBATCH -e logs/slurm_%j.log		   #Name of stderr error file(--error)
 
-#SBATCH -p standard-low              #Queue (--partition) name or #SBATCH -p gpu
+#SBATCH -p gpu              #Queue (--partition) name or #SBATCH -p gpu
 #SBATCH --gres=gpu:2               # request gpu card: it should be either 1 or 2
 
 #SBATCH -n 1                    #Total Number of mpi tasks (--ntasks .should be 1 for serial)
