@@ -206,7 +206,7 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 
         pred_file.write('\n\n***' + split + '***')
         for idx, h, r in zip(indices, pred_hyp, pred_ref):
-            pred_file.write('\n\nContext: \n' + str('\n'.join(data[idx][:-1])))
+            pred_file.write('\n\nContext: \n' + str('\n'.join(data.data[idx][:-1])))
             pred_file.write('\nGold sentence: ' + str(r) + '\nOutput: ' + str(h))
 
     elapsed = time.time() - start
@@ -485,7 +485,7 @@ def run(args, optuna_callback=None):
     logger.debug('\n\n\n=====>\n')
 
     # best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
-    # _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+    _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
     best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')  # load model with best criteria
 
     method = 'greedy'
@@ -557,9 +557,9 @@ F1_calc = F1Scorer()
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-embed", "--embedding_size", default=256, type=int, help="Give embedding size")
+    parser.add_argument("-embed", "--embedding_size", default=512, type=int, help="Give embedding size")
     parser.add_argument("-heads", "--nhead", default=4, type=int, help="Give number of heads")
-    parser.add_argument("-hid", "--nhid", default=256, type=int, help="Give hidden size")
+    parser.add_argument("-hid", "--nhid", default=512, type=int, help="Give hidden size")
 
     parser.add_argument("-l_e1", "--nlayers_e1", default=4, type=int, help="Give number of layers for Encoder 1")
     parser.add_argument("-l_e2", "--nlayers_e2", default=4, type=int, help="Give number of layers for Encoder 2")
@@ -567,7 +567,7 @@ if __name__ == "__main__":
 
     parser.add_argument("-d", "--dropout", default=0.2, type=float, help="Give dropout")
     parser.add_argument("-bs", "--batch_size", default=32, type=int, help="Give batch size")
-    parser.add_argument("-e", "--epochs", default=1, type=int, help="Give number of epochs")
+    parser.add_argument("-e", "--epochs", default=4, type=int, help="Give number of epochs")
     parser.add_argument("-model", "--model_type", default="HIER", help="Give model name one of [SET, HIER, MAT]")
 
     args = parser.parse_args()
