@@ -232,7 +232,8 @@ class Transformer(nn.Module):
             active_inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)       
             return active_src_seq, active_inst_idx_to_position_map
             
-        def beam_decode_step(inst_dec_beams, len_dec_seq, active_inst_idx_list, src,                              inst_idx_to_position_map, n_bm):
+        def beam_decode_step(inst_dec_beams, len_dec_seq, active_inst_idx_list, src,
+                             inst_idx_to_position_map, n_bm):
             ''' Decode and update beam status, and then return active beam idx '''
             n_active_inst = len(inst_idx_to_position_map)
                 
@@ -244,7 +245,7 @@ class Transformer(nn.Module):
 #             print(dec_partial_seq.shape) #1, 150
             
             # print( src.shape, dec_partial_seq.shape) # src is 50, 150
-            logits = self.forward(src.transpose(0,1) , dec_partial_seq.transpose(0,1))[-1, :, :].unsqueeze(0) # error here
+            logits = self.forward(src, dec_partial_seq)[-1, :, :].unsqueeze(0) # error here
 
             # print(logits.shape)
             word_prob = F.log_softmax(logits, dim=2)
@@ -272,7 +273,7 @@ class Transformer(nn.Module):
             active_inst_idx_list = list(range(batch_size))
             inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)
             
-            for len_dec_seq in range(1, 50+1):
+            for len_dec_seq in range(1, max_sent_len+1):
                 active_inst_idx_list = beam_decode_step(inst_dec_beams, len_dec_seq, active_inst_idx_list, src, inst_idx_to_position_map, n_bm)
                 if not active_inst_idx_list:
                     break
