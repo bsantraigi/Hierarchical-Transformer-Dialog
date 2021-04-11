@@ -64,13 +64,13 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler):  # l
     #         stat_cuda('before epoch')
 
     # for i, (data, targets, labels) in tqdm(enumerate(data_loader(train, train_counter, batch_size, wordtoidx)), total=nbatches):
-    for i, (data, targets, labels) in enumerate(
-            tqdm(DataLoader(train, shuffle=True, batch_size=batch_size, num_workers=cores))):
+    pbar = tqdm(DataLoader(train, shuffle=True, batch_size=batch_size, num_workers=cores))
+    for i, (data, targets, labels) in enumerate(pbar):
         data = data.to(device)
         targets = targets.to(device)
         labels = labels.to(device)
 
-        batch_size_curr = data.shape[1]
+        batch_size_curr = data.shape[0]
         optimizer.zero_grad()
         output = model(data, targets)
 
@@ -88,6 +88,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler):  # l
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         optimizer.step()
         total_loss += loss.item() * batch_size_curr
+        pbar.set_description(f"Loss: {loss.item():0.4} ")
         # print(loss.item())
 
         elapsed = time.time() - start_time

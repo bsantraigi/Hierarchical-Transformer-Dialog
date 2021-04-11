@@ -58,7 +58,7 @@ def define_args(main_args, trial):
         'nlayers_e1': trial.suggest_int("nlayers_e1", 2, 6),
         'nlayers_e2': trial.suggest_int("nlayers_e2", 2, 6),
         'nlayers_d': trial.suggest_int("nlayers_d", 2, 6),
-        'dropout': trial.suggest_float("dropout", 0.1, 0.8),
+        'dropout': trial.suggest_float("dropout", 0.05, 0.6),
         'batch_size': main_args.batch_size,
         'epochs': main_args.epochs,
         'model_type': main_args.model_type
