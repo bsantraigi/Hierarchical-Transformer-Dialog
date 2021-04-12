@@ -471,6 +471,7 @@ def run(args, optuna_callback=None):
         # using data parallel
         if torch.cuda.device_count() > 1:
             model = nn.DataParallel(model, device_ids=[0, 1], dim=1)
+            raise Exception("Dual GPU is disabled. Leads to nan loss value.")
         else:
             model = nn.DataParallel(model, device_ids=[0], dim=1)
         print('putting model on cuda')

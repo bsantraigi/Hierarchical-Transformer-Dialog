@@ -114,8 +114,8 @@ class Transformer(nn.Module):
         super(Transformer, self).__init__()
         from torch.nn import TransformerEncoder, TransformerEncoderLayer, TransformerDecoder, TransformerDecoderLayer
         
-        encoder_layers1 = TransformerEncoderLayer(ninp, nhead, nhid, dropout) ## sizes
-        self.transformer_encoder=TransformerEncoder(encoder_layers1, nlayers_e1)
+        # encoder_layers1 = TransformerEncoderLayer(ninp, nhead, nhid, dropout) ## sizes
+        # self.transformer_encoder=TransformerEncoder(encoder_layers1, nlayers_e1)
 
         encoder_layers2 = TransformerEncoderLayer(ninp, nhead, nhid, dropout, activation='relu')
         self.transformer_encoder_sent = TransformerEncoder(encoder_layers2, nlayers_e2)
@@ -168,7 +168,8 @@ class Transformer(nn.Module):
         # memory_inter = memory_inter.view(max_sent_len, -1, batch_size, self.ninp).transpose(0,1).reshape(-1, batch_size, self.ninp)
         # encoder 2
         memory_inter = self.pos_encoder(memory_inter)
-        memory = self.transformer_encoder_sent(memory_inter, src_mask_sent, src_pad_mask_sent)
+        # memory = self.transformer_encoder_sent(memory_inter, mask=src_mask_sent, src_key_padding_mask=src_pad_mask_sent)
+        memory = self.transformer_encoder_sent(memory_inter, mask=None, src_key_padding_mask=src_pad_mask_sent)
         return memory
 
     def foward_decoder(self, memory, tgt):
