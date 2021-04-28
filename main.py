@@ -72,7 +72,9 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler):  # l
 
         batch_size_curr = data.shape[0]
         optimizer.zero_grad()
-        output = model(data, targets)
+        output = model(data, targets) # output comes as [S, N, vocab]
+        # output = output.transpose(0, 1)
+        labels = labels.transpose(0, 1)
 
         label_pad_mask = (labels != 0).transpose(0, 1)
 
@@ -133,11 +135,12 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
                 else:
                     output = model.greedy_search(data, batch_size_curr)
 
+            labels = labels.transpose(0, 1)
             label_pad_mask = labels.transpose(0, 1) != 0
 
             if torch.is_tensor(output):  # greedy search
                 cur_loss = criterion(output.view(-1, ntokens),
-                                     labels.transpose(0, 1).reshape(-1)).item() * batch_size_curr
+                                     labels.reshape(-1)).item() * batch_size_curr
                 total_loss += cur_loss
 
                 output = torch.max(output, dim=2)[1]  # msl, batchsize
@@ -236,6 +239,7 @@ def get_loss_nograd(model, epoch, batch_size, criterion, split):  # losses per b
 
             batch_size_curr = data.shape[1]
             output = model(data, targets)
+            labels = labels.transpose(0, 1)
             label_pad_mask = (labels != 0).transpose(0, 1)
             loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
             total_loss += loss.item() * batch_size_curr

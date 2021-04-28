@@ -157,38 +157,36 @@ class Transformer(nn.Module):
 
     def forward_encoder(self, src):
         src = src.transpose(0, 1)
-        # print(src.shape, tgt.shape)
         max_sent_len = src.shape[0]
-        # src_mask = torch.zeros(max_sent_len, max_sent_len, device=device)
         src_pad_mask_sent = (src == 0).transpose(0, 1)
-        src_mask_sent = self.mask_func(max_sent_len, max_sent_len)
-        src_pad_mask = (src == 0).transpose(0, 1)
+
+        # Embedding
         src = self.encoder(src) * math.sqrt(self.ninp)
-        memory_inter = src
-        # memory_inter = memory_inter.view(max_sent_len, -1, batch_size, self.ninp).transpose(0,1).reshape(-1, batch_size, self.ninp)
-        # encoder 2
-        memory_inter = self.pos_encoder(memory_inter)
-        # memory = self.transformer_encoder_sent(memory_inter, mask=src_mask_sent, src_key_padding_mask=src_pad_mask_sent)
-        memory = self.transformer_encoder_sent(memory_inter, mask=None, src_key_padding_mask=src_pad_mask_sent)
+        src = self.pos_encoder(src)
+
+        # TODO: HIER encoder
+        memory = self.transformer_encoder_sent(src, mask=None, src_key_padding_mask=src_pad_mask_sent)
         return memory
 
-    def foward_decoder(self, memory, tgt):
+    def forward_decoder(self, src, memory, tgt):
         # tgt preprocess
         tgt = tgt.transpose(0, 1)
+        # Auto-regressive lower triangular mask
         tgt_mask = _gen_mask_sent(tgt.shape[0])
-        batch_size = tgt.shape[1]
         tgt_pad_mask = (tgt == 0).transpose(0, 1)
+
         # decoder
         tgt = self.encoder(tgt) * math.sqrt(self.ninp)
         tgt = self.pos_encoder(tgt)
-        output = self.transformer_decoder(tgt, memory, tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
+        memory_mask = (src == 0)
+        output = self.transformer_decoder(tgt, memory, tgt_mask=tgt_mask, memory_key_padding_mask=memory_mask, tgt_key_padding_mask=tgt_pad_mask)
         # check_nan(output, 'output')
         output = self.decoder(output)
         return output
 
-    def forward(self, src, tgt, src_pad_mask=None, tgt_pad_mask=None):
+    def forward(self, src, tgt):
         memory = self.forward_encoder(src)
-        output = self.foward_decoder(memory, tgt)
+        output = self.forward_decoder(src, memory, tgt)
         return output
 
     def greedy_search(self, src, batch_size):
@@ -199,7 +197,7 @@ class Transformer(nn.Module):
         memory = self.forward_encoder(src)
         for i in range(1, max_sent_len+1):
             # output = self.forward(src, tgt)[-1, :, :].unsqueeze(0)
-            output = self.foward_decoder(memory, tgt)[-1, :, :].unsqueeze(0)
+            output = self.forward_decoder(src, memory, tgt)[-1, :, :].unsqueeze(0)
 
             # print('output ', output.shape) # i,bs,vocab
             if i==1:
