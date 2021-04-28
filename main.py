@@ -64,7 +64,8 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler):  # l
     #         stat_cuda('before epoch')
 
     # for i, (data, targets, labels) in tqdm(enumerate(data_loader(train, train_counter, batch_size, wordtoidx)), total=nbatches):
-    pbar = tqdm(DataLoader(train, shuffle=True, batch_size=batch_size, num_workers=cores))
+    dloader = DataLoader(train, shuffle=True, batch_size=batch_size, num_workers=cores)
+    pbar = tqdm(dloader)
     for i, (data, targets, labels) in enumerate(pbar):
         data = data.to(device)
         targets = targets.to(device)
@@ -89,13 +90,15 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler):  # l
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         optimizer.step()
-        total_loss += loss.item() * batch_size_curr
+        # total_loss += loss.item() * batch_size_curr
+        total_loss += loss.item()
         pbar.set_description(f"Loss: {loss.item():0.4} ")
         # print(loss.item())
 
         elapsed = time.time() - start_time
 
-    total_loss /= len(train)
+    # total_loss /= len(train)
+    total_loss /= len(dloader)
     logger.debug('==> Epoch {}, Train \tLoss: {:0.4f}\tTime taken: {:0.1f}s'.format(epoch, total_loss, elapsed))
 
     return total_loss
@@ -116,8 +119,9 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
     # .module. if using dataparallel
     with torch.no_grad():
         # for i, (data, targets, labels) in tqdm(enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)), total=len(dataset)//batch_size):
+        dloader = DataLoader(dataset, batch_size=batch_size, num_workers=cores)
         for i, (data, targets, labels) in enumerate(
-                tqdm(DataLoader(dataset, batch_size=batch_size, num_workers=cores))):
+                tqdm(dloader)):
             data = data.to(device)
             targets = targets.to(device)
             labels = labels.to(device)
@@ -139,8 +143,10 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
             label_pad_mask = labels.transpose(0, 1) != 0
 
             if torch.is_tensor(output):  # greedy search
+                # cur_loss = criterion(output.view(-1, ntokens),
+                #                      labels.reshape(-1)).item() * batch_size_curr
                 cur_loss = criterion(output.view(-1, ntokens),
-                                     labels.reshape(-1)).item() * batch_size_curr
+                                     labels.reshape(-1)).item()
                 total_loss += cur_loss
 
                 output = torch.max(output, dim=2)[1]  # msl, batchsize
@@ -183,7 +189,8 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
         # using pred_hyp, pred_trg as using all dataset as indices, else use hyp,ref
         score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx) * 100
         f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx) * 100
-        total_loss = total_loss / len(dataset)
+        # total_loss = total_loss / len(dataset)
+        total_loss = total_loss / len(dloader)
 
         data, _, all_dialog_files = name_to_dataset(split)
         evaluate_dials = {}
@@ -229,10 +236,12 @@ def get_loss_nograd(model, epoch, batch_size, criterion, split):  # losses per b
 
     dataset, dataset_counter, _ = name_to_dataset(split)
 
+    dloader = DataLoader(dataset, batch_size=batch_size, num_workers=cores)
     with torch.no_grad():
         # for i, (data, targets, labels) in enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)):
+
         for i, (data, targets, labels) in enumerate(
-                tqdm(DataLoader(dataset, batch_size=batch_size, num_workers=cores))):
+                tqdm(dloader)):
             data = data.to(device)
             targets = targets.to(device)
             labels = labels.to(device)
@@ -242,11 +251,13 @@ def get_loss_nograd(model, epoch, batch_size, criterion, split):  # losses per b
             labels = labels.transpose(0, 1)
             label_pad_mask = (labels != 0).transpose(0, 1)
             loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
-            total_loss += loss.item() * batch_size_curr
+            # total_loss += loss.item() * batch_size_curr
+            total_loss += loss.item()
 
         elapsed = time.time() - start_time
 
-    total_loss /= len(dataset)
+    # total_loss /= len(dataset)
+    total_loss /= len(dloader)
     logger.debug('{} \tLoss(using ground truths): {:0.7f}\tTime taken: {:0.1f}s'.format(split, total_loss, elapsed))
     return total_loss
 
