@@ -66,14 +66,14 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler):  # l
     # for i, (data, targets, labels) in tqdm(enumerate(data_loader(train, train_counter, batch_size, wordtoidx)), total=nbatches):
     dloader = DataLoader(train, shuffle=True, batch_size=batch_size, num_workers=cores)
     pbar = tqdm(dloader)
-    for i, (data, targets, labels) in enumerate(pbar):
+    for i, (data, targets, labels, utt_indices) in enumerate(pbar):
         data = data.to(device)
         targets = targets.to(device)
         labels = labels.to(device)
 
         batch_size_curr = data.shape[0]
         optimizer.zero_grad()
-        output = model(data, targets) # output comes as [S, N, vocab]
+        output = model(data, targets, utt_indices) # output comes as [S, N, vocab]
         # output = output.transpose(0, 1)
         labels = labels.transpose(0, 1)
 
@@ -120,7 +120,7 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
     with torch.no_grad():
         # for i, (data, targets, labels) in tqdm(enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)), total=len(dataset)//batch_size):
         dloader = DataLoader(dataset, batch_size=batch_size, num_workers=cores)
-        for i, (data, targets, labels) in enumerate(
+        for i, (data, targets, labels, utt_indices) in enumerate(
                 tqdm(dloader)):
             data = data.to(device)
             targets = targets.to(device)
@@ -130,14 +130,14 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
 
             if method == 'beam':
                 if isinstance(model, nn.DataParallel):
-                    output = model.module.translate_batch(data, beam_size, batch_size_curr)
+                    output = model.module.translate_batch(data, beam_size, batch_size_curr, utt_indices)
                 else:
-                    output = model.translate_batch(data, beam_size, batch_size_curr)  # gives list of sentences itself
+                    output = model.translate_batch(data, beam_size, batch_size_curr, utt_indices)  # gives list of sentences itself
             elif method == 'greedy':
                 if isinstance(model, nn.DataParallel):
-                    output = model.module.greedy_search(data, batch_size_curr)
+                    output = model.module.greedy_search(data, batch_size_curr, utt_indices)
                 else:
-                    output = model.greedy_search(data, batch_size_curr)
+                    output = model.greedy_search(data, batch_size_curr, utt_indices)
 
             labels = labels.transpose(0, 1)
             label_pad_mask = labels.transpose(0, 1) != 0
@@ -240,14 +240,14 @@ def get_loss_nograd(model, epoch, batch_size, criterion, split):  # losses per b
     with torch.no_grad():
         # for i, (data, targets, labels) in enumerate(data_loader(dataset, dataset_counter, batch_size, wordtoidx)):
 
-        for i, (data, targets, labels) in enumerate(
+        for i, (data, targets, labels, utt_indices) in enumerate(
                 tqdm(dloader)):
             data = data.to(device)
             targets = targets.to(device)
             labels = labels.to(device)
 
             batch_size_curr = data.shape[1]
-            output = model(data, targets)
+            output = model(data, targets, utt_indices)
             labels = labels.transpose(0, 1)
             label_pad_mask = (labels != 0).transpose(0, 1)
             loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
@@ -471,7 +471,7 @@ def run(args, optuna_callback=None):
 
     ntokens = len(wordtoidx)
 
-    model = Transformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2,
+    model = HIERTransformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2,
                         args.nlayers_d, args.dropout, args.model_type).to(device)
 
     criterion = nn.CrossEntropyLoss(ignore_index=0)
