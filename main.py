@@ -70,6 +70,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler):  # l
         data = data.to(device)
         targets = targets.to(device)
         labels = labels.to(device)
+        utt_indices = utt_indices.to(device)
 
         batch_size_curr = data.shape[0]
         optimizer.zero_grad()
@@ -125,6 +126,7 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
             data = data.to(device)
             targets = targets.to(device)
             labels = labels.to(device)
+            utt_indices = utt_indices.to(device)
 
             batch_size_curr = targets.shape[0]
 
@@ -245,6 +247,7 @@ def get_loss_nograd(model, epoch, batch_size, criterion, split):  # losses per b
             data = data.to(device)
             targets = targets.to(device)
             labels = labels.to(device)
+            utt_indices = utt_indices.to(device)
 
             batch_size_curr = data.shape[1]
             output = model(data, targets, utt_indices)
