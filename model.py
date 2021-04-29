@@ -414,7 +414,7 @@ class HIERTransformer(Transformer):
 
         pe_utt_loc, enc_mask_utt, enc_mask_ct, dec_enc_attn_mask, src_key_padding_mask = all_masks
 
-        enc_inp = self.encoder(src) + self.post_word_emb.forward_by_index(pe_utt_loc).transpose(0, 1)
+        enc_inp = self.encoder(src) * math.sqrt(self.ninp) + self.post_word_emb.forward_by_index(pe_utt_loc).transpose(0, 1)
 
         for i, layer in enumerate(self.enc_layers):
             if i == self.num_layers_e1:
@@ -446,7 +446,7 @@ class HIERTransformer(Transformer):
         tgt_pad_mask = (tgt == 0).transpose(0, 1)
 
         # Decode - new
-        tgt = self.encoder(tgt) + self.post_word_emb(tgt.transpose(0, 1)).transpose(0, 1)
+        tgt = self.encoder(tgt) * math.sqrt(self.ninp) + self.post_word_emb(tgt.transpose(0, 1)).transpose(0, 1)
         output = self.transformer_decoder(tgt, memory, tgt_mask=tgt_mask, memory_mask=dec_enc_attn_mask,
                               tgt_key_padding_mask=tgt_pad_mask,
                               memory_key_padding_mask=src_key_padding_mask)
@@ -495,6 +495,9 @@ class HIERTransformer(Transformer):
                 logits = torch.cat([logits, output], dim=0)
             output_max = torch.max(output, dim=2)[1]
             tgt = torch.cat([tgt, output_max.transpose(0, 1)], dim=1)
+
+            # Update masks as per tgt
+            all_masks = self.prep_masks(src, tgt, utt_indices, self.ct_mask_type)
 
         tgt = tgt[1:, :]
         return logits
