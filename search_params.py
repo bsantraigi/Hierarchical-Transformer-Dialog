@@ -38,6 +38,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-bs", "--batch_size", default=8, type=int, help = "Give batch size") #
 parser.add_argument("-e", "--epochs", default=3, type=int, help = "Give number of epochs") #
 parser.add_argument("-model", "--model_type", default="SET", help="Give model name one of [SET, HIER, MAT]")
+parser.add_argument("-ctmask", "--ct_mask_type", default="cls", help="Give ct-mask name one of [hier, cls, full]")
 
 args = parser.parse_args()
 

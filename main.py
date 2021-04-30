@@ -475,7 +475,7 @@ def run(args, optuna_callback=None):
     ntokens = len(wordtoidx)
 
     model = HIERTransformer(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2,
-                        args.nlayers_d, args.dropout, args.model_type).to(device)
+                        args.nlayers_d, args.dropout, args.model_type, ct_mask_type=args.ct_mask_type).to(device)
 
     criterion = nn.CrossEntropyLoss(ignore_index=0)
 
@@ -589,6 +589,8 @@ if __name__ == "__main__":
     parser.add_argument("-bs", "--batch_size", default=32, type=int, help="Give batch size")
     parser.add_argument("-e", "--epochs", default=4, type=int, help="Give number of epochs")
     parser.add_argument("-model", "--model_type", default="HIER", help="Give model name one of [SET, HIER, MAT]")
+    parser.add_argument("-ctmask", "--ct_mask_type", default="cls", help="Give ct-mask name one of [hier, cls, full]")
+
 
     args = parser.parse_args()
 
