@@ -505,7 +505,12 @@ def run(args, optuna_callback=None):
     logger.debug('\n\n\n=====>\n')
 
     # best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')
-    _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+    if args.eval_only:
+        logger.debug('MODE: Eval Only')
+    else:
+        logger.debug('MODE: Train Model')
+        _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
+
     best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')  # load model with best criteria
 
     method = 'greedy'
@@ -590,7 +595,7 @@ if __name__ == "__main__":
     parser.add_argument("-e", "--epochs", default=4, type=int, help="Give number of epochs")
     parser.add_argument("-model", "--model_type", default="HIER", help="Give model name one of [SET, HIER, MAT]")
     parser.add_argument("-ctmask", "--ct_mask_type", default="cls", help="Give ct-mask name one of [hier, cls, full]")
-
+    parser.add_argument("-eval", "--eval_only", action="store_true", help="if true, model will be evaluated only")
 
     args = parser.parse_args()
 
