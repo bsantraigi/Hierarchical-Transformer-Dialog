@@ -2,7 +2,7 @@ import re
 
 import simplejson as json
 
-from nlp import normalize
+from .nlp import normalize
 
 digitpat = re.compile('\d+')
 timepat = re.compile("\d{1,2}[:]\d{1,2}")
@@ -28,12 +28,12 @@ def prepareSlotValuesIndependent():
     # read databases
     for domain in domains:
         try:
-            fin = file('db/' + domain + '_db.json')
+            fin = open('db/' + domain + '_db.json')
             db_json = json.load(fin)
             fin.close()
 
             for ent in db_json:
-                for key, val in ent.items():
+                for key, val in list(ent.items()):
                     if val == '?' or val == 'free':
                         pass
                     elif key == 'address':
@@ -103,12 +103,12 @@ def prepareSlotValuesIndependent():
             dic.append((normalize('Parkside Police Station'), '[' + domain + '_' + 'name' + ']'))
 
     # add at the end places from trains
-    fin = file('db/' + 'train' + '_db.json')
+    fin = open('db/' + 'train' + '_db.json')
     db_json = json.load(fin)
     fin.close()
 
     for ent in db_json:
-        for key, val in ent.items():
+        for key, val in list(ent.items()):
             if key == 'departure' or key == 'destination':
                 dic.append((normalize(val), '[' + 'value' + '_' + 'place' + ']'))
 

@@ -8,7 +8,7 @@ timepat = re.compile("\d{1,2}[:]\d{1,2}")
 pricepat = re.compile("\d{1,3}[.]\d{1,2}")
 
 
-fin = file('utils/mapping.pair')
+fin = open('utils/mapping.pair')
 replacements = []
 for line in fin.readlines():
     tok_from, tok_to = line.replace('\n', '').split('\t')
@@ -67,7 +67,7 @@ def normalize(text):
             text = text[:sidx] + re.sub('[,\. ]', '', m) + text[eidx:]
 
     # weird unicode bug
-    text = re.sub(u"(\u2018|\u2019)", "'", text)
+    text = re.sub("(\u2018|\u2019)", "'", text)
 
     # replace time and and price
     text = re.sub(timepat, ' [value_time] ', text)
@@ -107,8 +107,8 @@ def normalize(text):
     tokens = text.split()
     i = 1
     while i < len(tokens):
-        if re.match(u'^\d+$', tokens[i]) and \
-                re.match(u'\d+$', tokens[i - 1]):
+        if re.match('^\d+$', tokens[i]) and \
+                re.match('\d+$', tokens[i - 1]):
             tokens[i - 1] += tokens[i]
             del tokens[i]
         else:
@@ -143,8 +143,8 @@ class BLEUScorer(object):
             refs = [ref.split() for ref in refs]
 
             # Shawn's evaluation
-            refs[0] = [u'GO_'] + refs[0] + [u'EOS_']
-            hyps[0] = [u'GO_'] + hyps[0] + [u'EOS_']
+            refs[0] = ['GO_'] + refs[0] + ['EOS_']
+            hyps[0] = ['GO_'] + hyps[0] + ['EOS_']
 
             for idx, hyp in enumerate(hyps):
                 for i in range(4):
@@ -160,7 +160,7 @@ class BLEUScorer(object):
                         for ng in hypcnts:
                             max_counts[ng] = max(max_counts.get(ng, 0), refcnts[ng])
                     clipcnt = dict((ng, min(count, max_counts[ng])) \
-                                   for ng, count in hypcnts.items())
+                                   for ng, count in list(hypcnts.items()))
                     clip_count[i] += sum(clipcnt.values())
 
                 # accumulate r & c
@@ -213,7 +213,7 @@ def sentence_bleu_4(hyp, refs, weights=[0.25, 0.25, 0.25, 0.25]):
             for ng in hypcnts:
                 max_counts[ng] = max(max_counts.get(ng, 0), refcnts[ng])
         clipcnt = dict((ng, min(count, max_counts[ng])) \
-                       for ng, count in hypcnts.items())
+                       for ng, count in list(hypcnts.items()))
         clip_count[i] += sum(clipcnt.values())
 
     bestmatch = [1000, 1000]
@@ -242,8 +242,8 @@ if __name__ == '__main__':
     text = "ndd 19.30 nndd"
     #print re.match("(\d+).(\d+)", text)
     m = re.findall("(\d+\.\d+)", text)
-    print m
+    print(m)
     #print m[0].strip('.')
-    print re.sub('\.', '', m[0])
+    print(re.sub('\.', '', m[0]))
     #print m.groups()
     #print text

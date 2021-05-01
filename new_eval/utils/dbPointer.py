@@ -2,7 +2,7 @@ import sqlite3
 
 import numpy as np
 
-from nlp import normalize
+from .nlp import normalize
 
 
 # loading databases
@@ -57,7 +57,7 @@ def queryResult(domain, turn):
 
     flag = True
     #print turn['metadata'][domain]['semi']
-    for key, val in turn['metadata'][domain]['semi'].items():
+    for key, val in list(turn['metadata'][domain]['semi'].items()):
         if val == "" or val == "dont care" or val == 'not mentioned' or val == "don't care" or val == "dontcare" or val == "do n't care":
             pass
         else:
@@ -96,7 +96,7 @@ def queryResultVenues(domain, turn, real_belief=False):
     sql_query = "select * from {}".format(domain)
 
     if real_belief == True:
-        items = turn.items()
+        items = list(turn.items())
     elif real_belief=='tracking':
         for slot in turn[domain]:
             key = slot[0].split("-")[1]
@@ -137,7 +137,7 @@ def queryResultVenues(domain, turn, real_belief=False):
                 return []  # TODO test it
         pass
     else:
-        items = turn['metadata'][domain]['semi'].items()
+        items = list(turn['metadata'][domain]['semi'].items())
 
     flag = True
     for key, val in items:
