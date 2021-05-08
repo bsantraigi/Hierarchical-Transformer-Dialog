@@ -92,7 +92,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 
 		# total_loss += cur_loss.item()*batch_size_curr
 		total_loss += cur_loss.item()
-		pbar.set_description(f"Loss: {loss.item():0.4} ")
+		pbar.set_description(f"Loss: {cur_loss.item():0.4} ")
 
 		elapsed = time.time()-start_time
 
@@ -140,7 +140,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 				else:
 					output, output_max = model.greedy_search(data,act_vecs, batch_size_curr) 
 
-			# TODO: is shape of outputs and labels compatible??
+			labels = labels.transpose(0, 1)
 			label_pad_mask = labels.transpose(0,1)!=0
 			
 			if torch.is_tensor(output): # greedy search
@@ -246,6 +246,7 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 			batch_size_curr = data.shape[0]
 			# TODO: Check if output and labels are shape-compatible
 			output = model(data, targets,  act_vecs)
+			labels = labels.transpose(0, 1)
 			loss = criterion(output.view(-1, ntokens), labels.reshape(-1)) 
 			# total_loss += loss.item()*batch_size_curr
 			total_loss += loss.item()
