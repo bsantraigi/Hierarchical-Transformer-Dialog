@@ -124,7 +124,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 			labels = labels.to(device)
 			act_vecs = act_vecs.to(device)
 
-			batch_size_curr = targets.shape[1]
+			batch_size_curr = targets.shape[0]
 			# assert(data.shape[1]==act_vecs.shape[1])
 			# act_vecs is 44,bs
 
@@ -149,14 +149,14 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 				total_loss += curr_loss
 
 				# output = torch.max(output, dim=2)[1]
-				output_max = post_process(output_max.transpose(0,1))	
+				output_max = post_process(output_max) # output_max alread [batch, msl]
 				
 				if i==0:
 					hyp = output_max
-					ref = targets.transpose(0,1)
+					ref = targets
 				else:
 					hyp = torch.cat((hyp, output_max), dim=0)
-					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
+					ref= torch.cat((ref, targets), dim=0)
 			else: # beam search
 				if i==0:
 					hyp = [torch.tensor(l) for l in output]
@@ -185,7 +185,8 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 		
 		score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
 		f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
-		total_loss = total_loss/len(dataset)
+		# total_loss = total_loss/len(dataset)
+		total_loss = total_loss/len(dloader)
 
 		all_dialog_files = split_to_files(split)
 		evaluate_dials = {}
@@ -214,7 +215,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 
 		pred_file.write('\n\n***'+split+'***')
 		for idx, h, r in zip(indices, pred_hyp, pred_ref):
-			pred_file.write('\n\nContext: \n'+str('\n'.join(data[idx][:-1])))
+			pred_file.write('\n\nContext: \n'+str('\n'.join(data.data[idx][:-1])))
 			pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
 
 
@@ -242,7 +243,7 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 			labels = labels.to(device)
 			act_vecs = act_vecs.to(device)
 
-			batch_size_curr = data.shape[1]
+			batch_size_curr = data.shape[0]
 			# TODO: Check if output and labels are shape-compatible
 			output = model(data, targets,  act_vecs)
 			loss = criterion(output.view(-1, ntokens), labels.reshape(-1)) 
@@ -251,7 +252,7 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 
 		elapsed = time.time()-start_time
 
-	total_loss /= len(dataset)
+	total_loss /= len(dloader)
 	logger.debug('{} \tLoss(using ground truths): {:0.7f}\tTime taken: {:0.1f}s'.format(split, total_loss, elapsed))
 	return total_loss
 

@@ -378,6 +378,7 @@ class Transformer_acts(nn.Module):
         # Auto-regressive lower triangular mask
         tgt_mask = _gen_mask_sent(tgt.shape[0])
         tgt_pad_mask = (tgt == 0).transpose(0, 1)
+
         memory_padding_mask = (src == 0)
 
         # Decode
@@ -400,10 +401,10 @@ class Transformer_acts(nn.Module):
         return output
 
     def greedy_search(self, src, act_vecs, batch_size):
-        max_sent_len = 50
-        max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
-        tgt = 2*torch.ones(1, batch_size , device=device).long()
-        eos_tokens = 3*torch.ones(1, batch_size, device=device).long()
+        max_sent_len = 70
+        # max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
+        tgt = 2*torch.ones(batch_size, 1, device=device).long()
+        eos_tokens = 3*torch.ones(batch_size, 1, device=device).long()
 
         memory = self.forward_encoder(src)
         for i in range(1, max_sent_len+1): # predict 48 words + sos+eos=50
@@ -416,9 +417,9 @@ class Transformer_acts(nn.Module):
             else:
                 logits = torch.cat([logits, output], dim=0)
             output_max = torch.max(output, dim=2)[1]
-            tgt = torch.cat([tgt, output_max], dim=0)
+            tgt = torch.cat([tgt, output_max.t()], dim=1)
 
-        tgt = torch.cat([tgt[:49,:], eos_tokens], dim=0)
+        # tgt = torch.cat([tgt[:(max_sent_len - 1),:], eos_tokens], dim=1)
         return logits, tgt
 
         
