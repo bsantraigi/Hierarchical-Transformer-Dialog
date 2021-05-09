@@ -78,6 +78,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 		# optimizer.zero_grad() 			
 
 		output = model(data, targets, act_vecs)
+		labels = labels.transpose(0, 1)
 
 		cur_loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
 			
