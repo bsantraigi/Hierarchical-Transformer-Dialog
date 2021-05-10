@@ -559,7 +559,7 @@ def run(args, optuna_callback=None):
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)
-	# test_split('test', model, args, criterion)
+	test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	return val_bleu+0.5*(val_matches+val_successes)
