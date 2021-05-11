@@ -610,8 +610,8 @@ class Transformer_acts(nn.Module):
         super(Transformer_acts, self).__init__()
         from torch.nn import TransformerEncoder, TransformerEncoderLayer, TransformerDecoder, TransformerDecoderLayer
         
-        encoder_layers1 = TransformerEncoderLayer(ninp, nhead, nhid, dropout) ## sizes
-        self.transformer_encoder=TransformerEncoder(encoder_layers1, nlayers_e1)
+        # encoder_layers1 = TransformerEncoderLayer(ninp, nhead, nhid, dropout) ## sizes
+        # self.transformer_encoder=TransformerEncoder(encoder_layers1, nlayers_e1)
 
         encoder_layers2 = TransformerEncoderLayer(ninp, nhead, nhid, dropout, activation='relu')
         self.transformer_encoder_sent = TransformerEncoder(encoder_layers2, nlayers_e2)
@@ -652,73 +652,69 @@ class Transformer_acts(nn.Module):
         self.encoder.weight.data.uniform_(-initrange, initrange)
         self.decoder.bias.data.zero_()
         self.decoder.weight.data.uniform_(-initrange, initrange)
-    
-    def forward(self, src, tgt, act_vecs, src_pad_mask=None, tgt_pad_mask=None):
-        max_sent_len = 50
-        src_mask = torch.zeros(max_sent_len,max_sent_len, device=device)
-        tgt_mask = _gen_mask_sent(tgt.shape[0])        
-        batch_size = tgt.shape[1]
-        
-        max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
-        
-        src_sent = src.reshape(max_sent_len, -1, batch_size).transpose(0,1).reshape(-1, batch_size)
-        src_pad_mask_sent= (src_sent==0).transpose(0,1)
-        
-        # this mask depends on mdl, make dynamically
-        # src_mask_sent = _gen_mask_hierarchical(max_dial_len*max_sent_len, max_sent_len) # this mask focuses on utterances like te1
-        # src_mask_sent = _gen_mask(max_dial_len*max_sent_len) # this mask is unidirectional
-        src_mask_sent = self.mask_func(max_dial_len*max_sent_len, max_sent_len)
 
-        src = src.reshape(max_sent_len, -1)
+    def forward_encoder(self, src):
+        src = src.transpose(0, 1)
+        max_sent_len = src.shape[0]
+        src_pad_mask_sent = (src == 0).transpose(0, 1)
 
-        src_pad_mask = (src==0).transpose(0,1)
-        tgt_pad_mask = (tgt==0).transpose(0,1)
-
+        # Embed
         src = self.encoder(src) * math.sqrt(self.ninp)
         src = self.pos_encoder(src)
 
-        # encoder 1
-        memory_inter = self.transformer_encoder(src, src_mask, src_pad_mask)
+        # Encode
+        memory = self.transformer_encoder_sent(src, mask=None, src_key_padding_mask=src_pad_mask_sent)
+        return memory
 
-#         check_nan(memory_inter, 'memory_inter')
+    def forward_decoder(self, src, memory, tgt, act_vecs):
+        # tgt prep
+        tgt = tgt.transpose(0, 1)
 
-        memory_inter = memory_inter.view(max_sent_len, -1, batch_size, self.ninp).transpose(0,1).reshape(-1, batch_size, self.ninp)
+        # Auto-regressive lower triangular mask
+        tgt_mask = _gen_mask_sent(tgt.shape[0])
+        tgt_pad_mask = (tgt == 0).transpose(0, 1)
 
-        # encoder 2
-        memory_inter = self.pos_encoder(memory_inter)
-        memory = self.transformer_encoder_sent(memory_inter, src_mask_sent, src_pad_mask_sent)
+        memory_padding_mask = (src == 0)
 
-        # check_nan(memory, 'memory')
-        
+        # Decode
         # decoder - tgt shape - (msl, batch_size, embed)- add act_vec of (None ,bs,embed)
-        tgt = self.encoder(tgt) * math.sqrt(self.ninp)
         # act_vecs.T is batch_size, 44 ->embed of 100
+        tgt = self.encoder(tgt) * math.sqrt(self.ninp)
+        tgt = self.pos_encoder(tgt) + self.act_embedding(act_vecs).unsqueeze(0)
 
-        tgt = self.pos_encoder(tgt) + self.act_embedding(act_vecs.transpose(0,1)).unsqueeze(0)
-        output = self.transformer_decoder(tgt, memory, tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
-        
+        output = self.transformer_decoder(
+            tgt, memory, tgt_mask=tgt_mask,
+            memory_key_padding_mask=memory_padding_mask, tgt_key_padding_mask=tgt_pad_mask
+        )
         # check_nan(output, 'output')
-
         output = self.decoder(output)
+        return output
+    
+    def forward(self, src, tgt, act_vecs):
+        memory = self.forward_encoder(src)
+        output = self.forward_decoder(src, memory, tgt, act_vecs)
         return output
 
     def greedy_search(self, src, act_vecs, batch_size):
-        max_sent_len = 50
-        max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
-        tgt = 2*torch.ones(1, batch_size , device=device).long()
-        eos_tokens = 3*torch.ones(1, batch_size, device=device).long()
+        max_sent_len = 70
+        # max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
+        tgt = 2*torch.ones(batch_size, 1, device=device).long()
+        eos_tokens = 3*torch.ones(batch_size, 1, device=device).long()
 
+        memory = self.forward_encoder(src)
         for i in range(1, max_sent_len+1): # predict 48 words + sos+eos=50
-            output = self.forward(src, tgt, act_vecs)[-1,:,:].unsqueeze(0)
+            # output = self.forward(src, tgt, act_vecs)[-1,:,:].unsqueeze(0)
+            output = self.forward_decoder(src, memory, tgt, act_vecs)[-1,:,:].unsqueeze(0)
+
             # print('output ', output.shape) # i, bs, vocab
             if i==1:
                 logits = output
             else:
                 logits = torch.cat([logits, output], dim=0)
             output_max = torch.max(output, dim=2)[1]
-            tgt = torch.cat([tgt, output_max], dim=0)
+            tgt = torch.cat([tgt, output_max.t()], dim=1)
 
-        tgt = torch.cat([tgt[:49,:], eos_tokens], dim=0)
+        # tgt = torch.cat([tgt[:(max_sent_len - 1),:], eos_tokens], dim=1)
         return logits, tgt
 
         

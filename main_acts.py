@@ -15,7 +15,7 @@ import logging
 from nltk.util import ngrams
 import re, json
 from tqdm import tqdm
-
+import psutil
 
 from dataset import *
 from utils import *
@@ -65,12 +65,20 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	accumulated_steps = 3
 	optimizer.zero_grad()
 
-	for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(train, train_counter, train_hierarchial_actvecs, batch_size, wordtoidx)), total=nbatches):
+	dloader = DataLoader(train, shuffle=True, batch_size=batch_size, num_workers=cores)
+	pbar = tqdm(dloader)
 
-		batch_size_curr = data.shape[1]
+	for i, (data, targets, labels, act_vecs) in enumerate(pbar):
+		data = data.to(device)
+		targets = targets.to(device)
+		labels = labels.to(device)
+		act_vecs = act_vecs.to(device)
+
+		batch_size_curr = data.shape[0]
 		# optimizer.zero_grad() 			
 
 		output = model(data, targets, act_vecs)
+		labels = labels.transpose(0, 1)
 
 		cur_loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
 			
@@ -83,10 +91,14 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 			optimizer.step()
 			optimizer.zero_grad()
 
-		total_loss += cur_loss.item()*batch_size_curr
+		# total_loss += cur_loss.item()*batch_size_curr
+		total_loss += cur_loss.item()
+		pbar.set_description(f"Loss: {cur_loss.item():0.4} ")
+
 		elapsed = time.time()-start_time
 
-	total_loss /= len(train)
+	# total_loss /= len(train)
+	total_loss /= len(dloader)
 	logger.debug('==> Epoch {}, Train \tLoss: {:0.5f}\tTime taken: {:0.1f}'.format(epoch,  total_loss, elapsed))
 	return total_loss
 
@@ -106,9 +118,14 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 	nbatches = len(dataset)//batch_size
 
 	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in tqdm(enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs, batch_size, wordtoidx)), total=len(dataset)//batch_size):
+		dloader = DataLoader(dataset, batch_size=batch_size, num_workers=cores)
+		for i, (data, targets, labels, act_vecs) in enumerate(tqdm(dloader)):
+			data = data.to(device)
+			targets = targets.to(device)
+			labels = labels.to(device)
+			act_vecs = act_vecs.to(device)
 
-			batch_size_curr = targets.shape[1]
+			batch_size_curr = targets.shape[0]
 			# assert(data.shape[1]==act_vecs.shape[1])
 			# act_vecs is 44,bs
 
@@ -124,21 +141,23 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 				else:
 					output, output_max = model.greedy_search(data,act_vecs, batch_size_curr) 
 
-
+			labels = labels.transpose(0, 1)
 			label_pad_mask = labels.transpose(0,1)!=0
 			
 			if torch.is_tensor(output): # greedy search
-				total_loss += criterion(output.view(-1, ntokens), labels.reshape(-1)).item()*batch_size_curr
+				# curr_loss = criterion(output.view(-1, ntokens), labels.reshape(-1)).item()*batch_size_curr
+				curr_loss = criterion(output.view(-1, ntokens), labels.reshape(-1)).item()
+				total_loss += curr_loss
 
 				# output = torch.max(output, dim=2)[1]
-				output_max = post_process(output_max.transpose(0,1))	
+				output_max = post_process(output_max) # output_max alread [batch, msl]
 				
 				if i==0:
 					hyp = output_max
-					ref = targets.transpose(0,1)
+					ref = targets
 				else:
 					hyp = torch.cat((hyp, output_max), dim=0)
-					ref= torch.cat((ref, targets.transpose(0,1)), dim=0)
+					ref= torch.cat((ref, targets), dim=0)
 			else: # beam search
 				if i==0:
 					hyp = [torch.tensor(l) for l in output]
@@ -167,7 +186,8 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 		
 		score = BLEU_calc.score(pred_hyp, pred_ref, wordtoidx)*100
 		f1_entity = F1_calc.score(pred_hyp, pred_ref, wordtoidx)*100
-		total_loss = total_loss/len(dataset)
+		# total_loss = total_loss/len(dataset)
+		total_loss = total_loss/len(dloader)
 
 		all_dialog_files = split_to_files(split)
 		evaluate_dials = {}
@@ -196,7 +216,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 
 		pred_file.write('\n\n***'+split+'***')
 		for idx, h, r in zip(indices, pred_hyp, pred_ref):
-			pred_file.write('\n\nContext: \n'+str('\n'.join(data[idx][:-1])))
+			pred_file.write('\n\nContext: \n'+str('\n'.join(data.data[idx][:-1])))
 			pred_file.write('\nGold sentence: '+str(r)+'\nOutput: '+str(h))
 
 
@@ -213,19 +233,28 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 	start_time = time.time()
 	ntokens = len(idxtoword)
 	
-	dataset, dataset_counter, dataset_act_vecs = name_to_dataset(split)	
-	
-	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in enumerate(data_loader_acts(dataset, dataset_counter, dataset_act_vecs,  batch_size, wordtoidx)):
+	# dataset, dataset_counter, dataset_act_vecs = name_to_dataset(split)
+	dataset, _, _ = name_to_dataset(split)
 
-			batch_size_curr = data.shape[1]
+	dloader = DataLoader(dataset, batch_size=batch_size, num_workers=cores)
+	with torch.no_grad():
+		for i, (data, targets, labels, act_vecs) in enumerate(tqdm(dloader)):
+			data = data.to(device)
+			targets = targets.to(device)
+			labels = labels.to(device)
+			act_vecs = act_vecs.to(device)
+
+			batch_size_curr = data.shape[0]
+			# TODO: Check if output and labels are shape-compatible
 			output = model(data, targets,  act_vecs)
+			labels = labels.transpose(0, 1)
 			loss = criterion(output.view(-1, ntokens), labels.reshape(-1)) 
-			total_loss += loss.item()*batch_size_curr
+			# total_loss += loss.item()*batch_size_curr
+			total_loss += loss.item()
 
 		elapsed = time.time()-start_time
 
-	total_loss /= len(dataset)
+	total_loss /= len(dloader)
 	logger.debug('{} \tLoss(using ground truths): {:0.7f}\tTime taken: {:0.1f}s'.format(split, total_loss, elapsed))
 	return total_loss
 
@@ -402,23 +431,51 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
 
+idxtoword, wordtoidx = build_vocab_freqbased(load=False)
+vocab_size = len(idxtoword)
+ntokens=len(wordtoidx)
+print('length of vocab: ', vocab_size)
+
+# cores = max(2, psutil.cpu_count(logical=True))
+cores = 0
+
 train,train_counter,train_hierarchial_actvecs,train_dialog_files, train_responses = gen_dataset_with_acts('train')
 val, val_counter, val_hierarchial_actvecs, val_dialog_files, val_responses = gen_dataset_with_acts('val')
 test, test_counter, test_hierarchial_actvecs, test_dialog_files, test_responses =gen_dataset_with_acts('test')
 
+train = MWActsDataset(train, wordtoidx, train_hierarchial_actvecs)
+val = MWActsDataset(val, wordtoidx, val_hierarchial_actvecs)
+test = MWActsDataset(test, wordtoidx, test_hierarchial_actvecs)
 
-max_sent_len = 50
+dataloader_train = DataLoader(train, shuffle=True, batch_size=128, num_workers=cores)
+dataloader_val = DataLoader(val, batch_size=128, num_workers=cores)
+dataloader_test = DataLoader(test, batch_size=128, num_workers=cores)
 
-idxtoword, wordtoidx = build_vocab_freqbased(load=False)
-vocab_size = len(idxtoword)
+# a, b, c, d = train[1000]
+# def s(l, idxtoword):
+# 	return [idxtoword[w] for w in l.tolist() if w != 0]
+# print(s(a, idxtoword))
+# for w in range(1, 3 + cores):
+#     dataloader_train = DataLoader(train, shuffle=True, batch_size=128, num_workers=w)
+#     K = 200
+#     tic = time.perf_counter()
+#
+#     for i, batch in enumerate(dataloader_train):
+#         c,r,x,u = batch
+#         c = c.to(device)
+#         r = r.to(device)
+#         if i >= K:
+#             break
+#
+#     toc = time.perf_counter()
+#
+#     print(f"Avg batch creation time for {w} workers {(toc - tic)/K:0.4f} seconds")
+# exit(0)
 
-print('length of vocab: ', vocab_size)
-
-ntokens=len(wordtoidx)
+# max_sent_len = 50
 
 BLEU_calc = BLEUScorer() 
 F1_calc = F1Scorer()
-
 
 
 def run(args, optuna_callback=None):
@@ -475,7 +532,11 @@ def run(args, optuna_callback=None):
 		torch.backends.cudnn.benchmark = True
 		torch.set_default_tensor_type('torch.cuda.FloatTensor')
 		# using data parallel
-		model = nn.DataParallel(model, device_ids=[0,1], dim=1)
+		if torch.cuda.device_count() > 1:
+			model = nn.DataParallel(model, device_ids=[0, 1], dim=1)
+			raise Exception("Dual GPU is disabled. Leads to nan loss value.")
+		else:
+			model = nn.DataParallel(model, device_ids=[0], dim=1)
 		print('putting model on cuda')
 		model.to(device)
 		criterion.to(device)
@@ -498,7 +559,7 @@ def run(args, optuna_callback=None):
 
 	# # To get greedy, beam(2,3,5) scores for val, test 
 	# test_split('val', model, args, criterion)
-	# test_split('test', model, args, criterion)
+	test_split('test', model, args, criterion)
 
 	_,val_bleu ,_,val_matches,val_successes = testing(model, args, criterion, 'val', 'greedy')
 	return val_bleu+0.5*(val_matches+val_successes)
@@ -519,7 +580,7 @@ if __name__ == '__main__':
 	parser.add_argument("-bs", "--batch_size", default=32, type=int, help = "Give batch size")
 	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
 
-	parser.add_argument("-model", "--model_type", default="SET++", help="Give model name one of [SET++, HIER++]")
+	parser.add_argument("-model", "--model_type", default="HIER++", help="Give model name one of [SET++, HIER++]")
 
 	args = parser.parse_args()
 	run(args)

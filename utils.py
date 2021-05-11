@@ -152,6 +152,65 @@ class MWDataset(Dataset):
     def __len__(self):
         return len(self.data)
 
+
+class MWActsDataset(Dataset):
+    """An abstract class representing a Dataset.
+
+    All other datasets should subclass it. All subclasses should override
+    ``__len__``, that provides the size of the dataset, and ``__getitem__``,
+    supporting integer indexing in range from 0 to len(self) exclusive.
+    """
+
+    def __init__(self, dataset, wordtoidx, actset):
+        super(MWActsDataset, self).__init__()
+        self.data = dataset
+        self.actset = actset
+        self.wordtoidx = wordtoidx
+
+    #     def _preprocess(self, C, R):
+    #         # should be on cpu to support multiple workers in dataloader
+    #         c = torch.tensor(tokenizer.encode("[CLS] " + C).ids)[:self.max_len]
+    #         r = torch.tensor(tokenizer.encode("[CLS] " + R).ids)[:self.max_len]
+    #         return c,r
+
+    def __getitem__(self, index, max_ctx_len=250, max_trg_len=70):
+        dataset = self.data
+        wordtoidx = self.wordtoidx
+
+        d = dataset[index]
+        vectorised_seq = [[wordtoidx.get(word, 1) for word in tokenize_en(sent)] for sent in d]
+        *vectorised_seq, trg_seq = vectorised_seq
+
+        seq_tensor = torch.zeros(max_ctx_len, device=torch.device("cpu"))
+        x, total = 0, 0
+        for s in reversed(vectorised_seq):
+            if (len(s) + total) < max_ctx_len:
+                x += 1
+                total += len(s)
+            else:
+                break
+
+        vectorised_seq = [w for s in vectorised_seq[-x:] for w in s]
+        # print(len(vectorised_seq), total, len(s))
+        assert len(vectorised_seq) == total
+        seq_tensor[:len(vectorised_seq)] = torch.tensor(vectorised_seq, device=torch.device("cpu"))
+
+        # seq_lengths = torch.LongTensor([len(vectorised_seq)])
+
+        target_tensor = torch.zeros(max_trg_len, device=torch.device("cpu"))
+        label_tensor = torch.zeros(max_trg_len, device=torch.device("cpu"))
+
+        tl = min(len(trg_seq), max_trg_len)
+        target_tensor[:tl] = torch.tensor(trg_seq[:tl], device=torch.device("cpu"))
+        label_tensor[:(tl - 1)] = torch.tensor(trg_seq[1:tl], device=torch.device("cpu"))
+
+        batch_actvecs = torch.tensor(self.actset[index], device=torch.device("cpu"))
+        return seq_tensor.long(), target_tensor.long(), label_tensor.long(), batch_actvecs.float()
+
+    def __len__(self):
+        return len(self.data)
+
+
 def data_loader(dataset, dataset_counter, batch_size, wordtoidx): 
     # return batches according to dialog len, -> all similar at once
     # do mask also for these
