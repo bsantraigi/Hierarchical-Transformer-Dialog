@@ -969,6 +969,7 @@ class HIERTransformer_acts(Transformer_acts):
                 logits = torch.cat([logits, output], dim=0)
             output_max = torch.max(output, dim=2)[1]
             tgt = torch.cat([tgt, output_max.t()], dim=1)
+            all_masks = self.prep_masks(src, tgt, utt_indices, self.ct_mask_type)
 
         # tgt = torch.cat([tgt[:(max_sent_len - 1),:], eos_tokens], dim=1)
         return logits, tgt
