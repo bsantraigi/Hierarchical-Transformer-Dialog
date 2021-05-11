@@ -818,4 +818,259 @@ class Transformer_acts(nn.Module):
         return result
     
 
-    
+class HIERTransformer_acts(Transformer_acts):
+    def __init__(self, ntoken, ninp, nhead, nhid, nlayers_e1, nlayers_e2, nlayers_d, dropout, ablation,
+                 ct_mask_type="cls"):
+        # ninp is embed_size
+        Module.__init__(self)
+
+        from hier_transformer_pytorch.model import TransformerEncoder, \
+            TransformerEncoderLayer, TransformerDecoder, TransformerDecoderLayer
+
+        # =================== EMB ==========================
+        self.encoder = nn.Embedding(ntoken, ninp)
+        # self.pos_encoder = PositionalEncoding(ninp, dropout)
+
+        # Emb-new
+        # >> Pos Emb
+        self.post_word_emb = HIERPositionalEmbedding(d_model=ninp)
+
+        # =================== Encoder ======================
+        # encoder_layers2 = TransformerEncoderLayer(ninp, nhead, nhid, dropout, activation='relu')
+        # self.transformer_encoder_sent = TransformerEncoder(encoder_layers2, nlayers_e2)
+
+        # Encoder-New
+        layer_norm_eps = 1e-5
+        encoder_layers2 = TransformerEncoderLayer(ninp, nhead, nhid, dropout, 'relu', layer_norm_eps)
+        encoder_norm = LayerNorm(ninp, eps=layer_norm_eps)
+        self.enc_layers = _get_clones(encoder_layers2, nlayers_e1 + nlayers_e2)
+        self.num_layers_e1 = nlayers_e1
+        self.num_layers_e2 = nlayers_e2
+        self.norm_e = encoder_norm
+
+        # ================== Decoder =======================
+        # decoder_layers = TransformerDecoderLayer(ninp, nhead, nhid, dropout, activation='relu')
+        # self.transformer_decoder = TransformerDecoder(decoder_layers, nlayers_d)
+        self.decoder = nn.Linear(ninp, ntoken)
+
+        # Decoder - New
+        decoder_layers = TransformerDecoderLayer(ninp, nhead, nhid, dropout, "relu", layer_norm_eps)
+        decoder_norm = LayerNorm(ninp, eps=layer_norm_eps)
+        self.transformer_decoder = TransformerDecoder(decoder_layers, nlayers_d, decoder_norm)
+
+        self.ct_mask_type = ct_mask_type
+        # =============== Code section from Anusha's Impl. ===========
+        self.ninp = ninp
+        self.nhead = nhead
+
+        self.act_embedding = nn.Linear(44, self.ninp)  # Comment this for transformers_dyn_hdsaslide_1 checkpoint
+
+        if ablation == 'SET++':
+            self.mask_func = _gen_mask
+        elif ablation == 'HIER++':
+            self.mask_func = _gen_mask_hierarchical
+        else:
+            print('Not a valid ablation')
+            raise ValueError
+
+        self.ablation = ablation
+
+        # self.max_sent_len = tgt_mask.size(0)
+        self._reset_parameters()
+
+    def forward_encoder(self, src, all_masks):
+        src = src.transpose(0, 1)
+
+        pe_utt_loc, enc_mask_utt, enc_mask_ct, dec_enc_attn_mask, src_key_padding_mask = all_masks
+
+        enc_inp = self.encoder(src) * math.sqrt(self.ninp) + self.post_word_emb.forward_by_index(pe_utt_loc).transpose(
+            0, 1)
+
+        for i, layer in enumerate(self.enc_layers):
+            if i == self.num_layers_e1:
+                # Positional Embedding for Context Encoder
+                enc_inp = enc_inp + self.post_word_emb(enc_inp.transpose(0, 1)).transpose(0, 1)
+            if i < self.num_layers_e1:
+                enc_inp = layer(enc_inp,
+                                src_key_padding_mask=src_key_padding_mask,
+                                src_mask=enc_mask_utt)
+            else:
+                enc_inp = layer(enc_inp,
+                                src_key_padding_mask=src_key_padding_mask,
+                                src_mask=enc_mask_ct)
+
+        if self.norm_e is not None:
+            enc_inp = self.norm_e(enc_inp)
+        memory = enc_inp
+
+        return memory
+
+    def forward_decoder(self, src, memory, tgt, act_vecs, all_masks):
+        # tgt prep
+        tgt = tgt.transpose(0, 1)
+
+        # Masks
+        pe_utt_loc, enc_mask_utt, enc_mask_ct, dec_enc_attn_mask, src_key_padding_mask = all_masks
+        tgt_mask = _gen_mask_sent(tgt.shape[0])
+        # Auto-regressive lower triangular mask
+        tgt_pad_mask = (tgt == 0).transpose(0, 1)
+
+        memory_padding_mask = (src == 0)
+
+        # Decode
+        # decoder - tgt shape - (msl, batch_size, embed)- add act_vec of (None ,bs,embed)
+        # act_vecs.T is batch_size, 44 ->embed of 100
+
+        # Decode - new
+        tgt = self.encoder(tgt) * math.sqrt(self.ninp) +\
+              self.post_word_emb(tgt.transpose(0, 1)).transpose(0, 1) +\
+              self.act_embedding(act_vecs).unsqueeze(0)
+        output = self.transformer_decoder(tgt, memory, tgt_mask=tgt_mask, memory_mask=dec_enc_attn_mask,
+                                          tgt_key_padding_mask=tgt_pad_mask,
+                                          memory_key_padding_mask=src_key_padding_mask)
+        output = self.decoder(output)
+
+        return output
+
+    def forward(self, src, tgt, act_vecs, utt_indices):
+        # Prepare masks
+        all_masks = self.prep_masks(src, tgt, utt_indices, self.ct_mask_type)
+
+        memory = self.forward_encoder(src, all_masks)
+        output = self.forward_decoder(src, memory, tgt, act_vecs, all_masks)
+        return output
+
+    def prep_masks(self, src, tgt, utt_indices, ct_mask_type):
+        src_key_padding_mask = (src == 0)
+        all_masks = get_hier_encoder_mask(tgt,
+                                          src,
+                                          src_key_padding_mask,
+                                          utt_indices,
+                                          type=ct_mask_type)
+        all_masks = (*all_masks, src_key_padding_mask)
+        return all_masks
+
+    def greedy_search(self, src, act_vecs, batch_size, utt_indices):
+        max_sent_len = 70
+        # max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
+        tgt = 2 * torch.ones(batch_size, 1, device=device).long()
+        eos_tokens = 3 * torch.ones(batch_size, 1, device=device).long()
+
+        all_masks = self.prep_masks(src, tgt, utt_indices, self.ct_mask_type)
+        memory = self.forward_encoder(src, all_masks)
+        for i in range(1, max_sent_len + 1):  # predict 48 words + sos+eos=50
+            # output = self.forward(src, tgt, act_vecs)[-1,:,:].unsqueeze(0)
+            output = self.forward_decoder(src, memory, tgt, act_vecs, all_masks)[-1, :, :].unsqueeze(0)
+
+            # print('output ', output.shape) # i, bs, vocab
+            if i == 1:
+                logits = output
+            else:
+                logits = torch.cat([logits, output], dim=0)
+            output_max = torch.max(output, dim=2)[1]
+            tgt = torch.cat([tgt, output_max.t()], dim=1)
+
+        # tgt = torch.cat([tgt[:(max_sent_len - 1),:], eos_tokens], dim=1)
+        return logits, tgt
+
+    def translate_batch(self, src, act_vecs, n_bm, batch_size, utt_indices):  # , src_pad_mask, tgt_pad_mask
+        # adopted from HDSA_Dialog
+        device = src.device
+
+        max_sent_len = 50
+        max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
+
+        src = src.transpose(0, 1)  # src shape changed to (bs*mdl, msl)
+        act_vecs = act_vecs.transpose(0, 1)  # act_vecs changed to bs,44
+
+        def collate_active_info(src, act_vecs, inst_idx_to_position_map, active_inst_idx_map):
+            # Sentences which are still active are collected,
+            # so the decoder will not run on completed sentences.
+            n_prev_active_inst = len(inst_idx_to_position_map)
+            active_inst_idx = [inst_idx_to_position_map[k] for k in active_inst_idx_list]
+            active_inst_idx = torch.LongTensor(active_inst_idx).to(device)
+
+            active_src_seq = collect_active_part(src, active_inst_idx, n_prev_active_inst, n_bm)
+            active_act_vecs = collect_active_part(act_vecs, active_inst_idx, n_prev_active_inst, n_bm)
+
+            active_inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)
+            return active_src_seq, active_act_vecs, active_inst_idx_to_position_map
+
+        def beam_decode_step(inst_dec_beams, len_dec_seq, active_inst_idx_list, src, act_vecs, inst_idx_to_position_map,
+                             n_bm):
+            ''' Decode and update beam status, and then return active beam idx '''
+            n_active_inst = len(inst_idx_to_position_map)
+
+            dec_partial_seq = [inst_dec_beams[idx].get_current_state()
+                               for idx in active_inst_idx_list if not inst_dec_beams[idx].done]
+            dec_partial_seq = torch.stack(dec_partial_seq).to(device)
+            dec_partial_seq = dec_partial_seq.view(-1, len_dec_seq)
+
+            # print( src.shape, dec_partial_seq.shape , act_vecs.shape) # src is 50, 150
+            logits = self.forward(src.transpose(0, 1), dec_partial_seq.transpose(0, 1), act_vecs.transpose(0, 1),
+                                  utt_indices)[-1, :, :].unsqueeze(0)  # error here
+
+            # print(logits.shape)
+            word_prob = F.log_softmax(logits, dim=2)
+            word_prob = word_prob.view(n_active_inst, n_bm, -1)  # active, bms, vocab
+
+            # print(inst_idx_to_position_map) # 0:0, 1:1 map
+
+            # Update the beam with predicted word prob information and collect incomplete instances
+            active_inst_idx_list = []
+            for inst_idx, inst_position in inst_idx_to_position_map.items():
+                is_inst_complete = inst_dec_beams[inst_idx].advance(
+                    word_prob[inst_position])  # gotta check advance method here!!
+                if not is_inst_complete:
+                    active_inst_idx_list += [inst_idx]
+
+            return active_inst_idx_list
+
+        with torch.no_grad():
+            # repeat src n_bm times
+            # act_vecs shape is bs,44 after T
+
+            src = src.repeat(1, n_bm).reshape(batch_size * n_bm, -1)  # bm*batch_size, msl*mdl
+            act_vecs = act_vecs.repeat(1, n_bm).reshape(batch_size * n_bm, -1)
+            # act_vecs -> bs*n_bm, 44
+
+            inst_dec_beams = [Beam(n_bm, device=device) for _ in range(batch_size)]
+            active_inst_idx_list = list(range(batch_size))
+            inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)
+
+            for len_dec_seq in range(1, max_sent_len + 1):
+                active_inst_idx_list = beam_decode_step(inst_dec_beams, len_dec_seq, active_inst_idx_list, src,
+                                                        act_vecs, inst_idx_to_position_map, n_bm)
+                if not active_inst_idx_list:
+                    break
+                src, act_vecs, inst_idx_to_position_map = collate_active_info(src, act_vecs, inst_idx_to_position_map,
+                                                                              active_inst_idx_list)
+
+            def collect_hypothesis_and_scores(inst_dec_beams, n_best):
+                all_hyp, all_scores = [], []
+                for beam in inst_dec_beams:
+                    scores = beam.scores
+                    hyps = np.array([beam.get_hypothesis(i) for i in range(beam.size)], 'long')
+                    lengths = (hyps != Constants.PAD).sum(-1)
+                    normed_scores = [scores[i].item() / lengths[i] for i, hyp in enumerate(hyps)]
+                    idxs = np.argsort(normed_scores)[::-1]
+
+                    all_hyp.append([hyps[idx] for idx in idxs])
+                    all_scores.append([normed_scores[idx] for idx in idxs])
+                return all_hyp, all_scores
+
+            batch_hyp, batch_scores = collect_hypothesis_and_scores(inst_dec_beams, n_bm)
+
+        batch_hyp, batch_scores = collect_hypothesis_and_scores(inst_dec_beams, n_bm)
+
+        result = []
+        for _ in batch_hyp:
+            finished = False
+            for r in _:
+                if len(r) >= 8 and len(r) < max_sent_len:
+                    result.append(r)
+                    finished = True
+                    break
+            if not finished:
+                result.append(_[0])
+        return result

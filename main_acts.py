@@ -68,16 +68,17 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	dloader = DataLoader(train, shuffle=True, batch_size=batch_size, num_workers=cores)
 	pbar = tqdm(dloader)
 
-	for i, (data, targets, labels, act_vecs) in enumerate(pbar):
+	for i, (data, targets, labels, act_vecs, utt_indices) in enumerate(pbar):
 		data = data.to(device)
 		targets = targets.to(device)
 		labels = labels.to(device)
 		act_vecs = act_vecs.to(device)
+		utt_indices = utt_indices.to(device)
 
 		batch_size_curr = data.shape[0]
 		# optimizer.zero_grad() 			
 
-		output = model(data, targets, act_vecs)
+		output = model(data, targets, act_vecs, utt_indices)
 		labels = labels.transpose(0, 1)
 
 		cur_loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
@@ -119,11 +120,12 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 
 	with torch.no_grad():
 		dloader = DataLoader(dataset, batch_size=batch_size, num_workers=cores)
-		for i, (data, targets, labels, act_vecs) in enumerate(tqdm(dloader)):
+		for i, (data, targets, labels, act_vecs, utt_indices) in enumerate(tqdm(dloader)):
 			data = data.to(device)
 			targets = targets.to(device)
 			labels = labels.to(device)
 			act_vecs = act_vecs.to(device)
+			utt_indices = utt_indices.to(device)
 
 			batch_size_curr = targets.shape[0]
 			# assert(data.shape[1]==act_vecs.shape[1])
@@ -137,9 +139,9 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 					output = model.translate_batch(data, act_vecs, beam_size , batch_size_curr) 
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
-					output, output_max = model.module.greedy_search(data,act_vecs,  batch_size_curr) # .module. if using dataparallel
+					output, output_max = model.module.greedy_search(data,act_vecs,  batch_size_curr, utt_indices) # .module. if using dataparallel
 				else:
-					output, output_max = model.greedy_search(data,act_vecs, batch_size_curr) 
+					output, output_max = model.greedy_search(data,act_vecs, batch_size_curr, utt_indices)
 
 			labels = labels.transpose(0, 1)
 			label_pad_mask = labels.transpose(0,1)!=0
@@ -238,15 +240,16 @@ def get_loss_nograd(model, epoch, batch_size,criterion, split): # losses per bat
 
 	dloader = DataLoader(dataset, batch_size=batch_size, num_workers=cores)
 	with torch.no_grad():
-		for i, (data, targets, labels, act_vecs) in enumerate(tqdm(dloader)):
+		for i, (data, targets, labels, act_vecs, utt_indices) in enumerate(tqdm(dloader)):
 			data = data.to(device)
 			targets = targets.to(device)
 			labels = labels.to(device)
 			act_vecs = act_vecs.to(device)
+			utt_indices = utt_indices.to(device)
 
 			batch_size_curr = data.shape[0]
 			# TODO: Check if output and labels are shape-compatible
-			output = model(data, targets,  act_vecs)
+			output = model(data, targets,  act_vecs, utt_indices)
 			labels = labels.transpose(0, 1)
 			loss = criterion(output.view(-1, ntokens), labels.reshape(-1)) 
 			# total_loss += loss.item()*batch_size_curr
@@ -520,8 +523,9 @@ def run(args, optuna_callback=None):
 
 	ntokens=len(wordtoidx)
 
+	model = HIERTransformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2,
+								 args.nlayers_d, args.dropout, args.model_type, ct_mask_type=args.ct_mask_type).to(device)
 
-	model = Transformer_acts(ntokens, args.embedding_size, args.nhead, args.nhid, args.nlayers_e1, args.nlayers_e2, args.nlayers_d, args.dropout, args.model_type).to(device)
 	criterion = nn.CrossEntropyLoss(ignore_index=0)
 
 	seed = 123
@@ -581,6 +585,8 @@ if __name__ == '__main__':
 	parser.add_argument("-e", "--epochs", default=30, type=int, help = "Give number of epochs")
 
 	parser.add_argument("-model", "--model_type", default="HIER++", help="Give model name one of [SET++, HIER++]")
+	parser.add_argument("-ctmask", "--ct_mask_type", default="cls", help="Give ct-mask name one of [hier, cls, full]")
+	parser.add_argument("-eval", "--eval_only", action="store_true", help="if true, model will be evaluated only")
 
 	args = parser.parse_args()
 	run(args)

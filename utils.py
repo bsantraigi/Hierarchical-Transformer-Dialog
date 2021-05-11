@@ -190,11 +190,15 @@ class MWActsDataset(Dataset):
             else:
                 break
 
+        utt_indices = [uj for uj, s in enumerate(vectorised_seq[-x:]) for _ in range(len(s))]
         vectorised_seq = [w for s in vectorised_seq[-x:] for w in s]
         # print(len(vectorised_seq), total, len(s))
         assert len(vectorised_seq) == total
         seq_tensor[:len(vectorised_seq)] = torch.tensor(vectorised_seq, device=torch.device("cpu"))
 
+        utt_indices_tensor = torch.zeros(max_ctx_len, device=torch.device("cpu"))
+        utt_indices_tensor[:len(utt_indices)] = torch.tensor(utt_indices, device=torch.device("cpu"))
+        utt_indices_tensor[len(utt_indices):] = max(utt_indices) + 1
         # seq_lengths = torch.LongTensor([len(vectorised_seq)])
 
         target_tensor = torch.zeros(max_trg_len, device=torch.device("cpu"))
@@ -205,7 +209,7 @@ class MWActsDataset(Dataset):
         label_tensor[:(tl - 1)] = torch.tensor(trg_seq[1:tl], device=torch.device("cpu"))
 
         batch_actvecs = torch.tensor(self.actset[index], device=torch.device("cpu"))
-        return seq_tensor.long(), target_tensor.long(), label_tensor.long(), batch_actvecs.float()
+        return seq_tensor.long(), target_tensor.long(), label_tensor.long(), batch_actvecs.float(), utt_indices_tensor
 
     def __len__(self):
         return len(self.data)
