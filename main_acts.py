@@ -62,7 +62,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 		
 	score=0
 	total_bleu_score=0
-	accumulated_steps = 3
+	# accumulated_steps = 3
 	optimizer.zero_grad()
 
 	dloader = DataLoader(train, shuffle=True, batch_size=batch_size, num_workers=cores)
@@ -83,14 +83,14 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 
 		cur_loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
 			
-		loss = cur_loss / accumulated_steps
-		loss.backward()
+		# loss = cur_loss / accumulated_steps
+		cur_loss.backward()
 	
 		torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
 		
-		if i%accumulated_steps==0:
-			optimizer.step()
-			optimizer.zero_grad()
+		# if i%accumulated_steps==0:
+		optimizer.step()
+		optimizer.zero_grad()
 
 		# total_loss += cur_loss.item()*batch_size_curr
 		total_loss += cur_loss.item()
