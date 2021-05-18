@@ -142,7 +142,7 @@ def evaluate(model, args, dataset, dataset_counter, batch_size, criterion, split
                     output = model.greedy_search(data, batch_size_curr, utt_indices)
 
             labels = labels.transpose(0, 1)
-            label_pad_mask = labels.transpose(0, 1) != 0
+            # label_pad_mask = labels.transpose(0, 1) != 0
 
             if torch.is_tensor(output):  # greedy search
                 # cur_loss = criterion(output.view(-1, ntokens),
@@ -252,7 +252,7 @@ def get_loss_nograd(model, epoch, batch_size, criterion, split):  # losses per b
             batch_size_curr = data.shape[1]
             output = model(data, targets, utt_indices)
             labels = labels.transpose(0, 1)
-            label_pad_mask = (labels != 0).transpose(0, 1)
+            # label_pad_mask = (labels != 0).transpose(0, 1)
             loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
             # total_loss += loss.item() * batch_size_curr
             total_loss += loss.item()

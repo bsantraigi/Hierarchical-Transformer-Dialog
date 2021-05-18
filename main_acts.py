@@ -59,15 +59,9 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 	
 #     if torch.cuda.is_available():
 #         stat_cuda('before epoch')
-		
-	score=0
-	total_bleu_score=0
-	# accumulated_steps = 3
-	optimizer.zero_grad()
 
 	dloader = DataLoader(train, shuffle=True, batch_size=batch_size, num_workers=cores)
 	pbar = tqdm(dloader)
-
 	for i, (data, targets, labels, act_vecs, utt_indices) in enumerate(pbar):
 		data = data.to(device)
 		targets = targets.to(device)
@@ -76,9 +70,9 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 		utt_indices = utt_indices.to(device)
 
 		batch_size_curr = data.shape[0]
-		# optimizer.zero_grad() 			
-
+		optimizer.zero_grad()
 		output = model(data, targets, act_vecs, utt_indices)
+
 		labels = labels.transpose(0, 1)
 
 		cur_loss = criterion(output.view(-1, ntokens), labels.reshape(-1))
@@ -87,10 +81,7 @@ def train_epoch(model, epoch, batch_size, criterion, optimizer, scheduler): # lo
 		cur_loss.backward()
 	
 		torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-		
-		# if i%accumulated_steps==0:
 		optimizer.step()
-		optimizer.zero_grad()
 
 		# total_loss += cur_loss.item()*batch_size_curr
 		total_loss += cur_loss.item()
@@ -144,7 +135,7 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 					output, output_max = model.greedy_search(data,act_vecs, batch_size_curr, utt_indices)
 
 			labels = labels.transpose(0, 1)
-			label_pad_mask = labels.transpose(0,1)!=0
+			# label_pad_mask = labels.transpose(0,1)!=0
 			
 			if torch.is_tensor(output): # greedy search
 				# curr_loss = criterion(output.view(-1, ntokens), labels.reshape(-1)).item()*batch_size_curr
