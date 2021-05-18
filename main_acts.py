@@ -125,9 +125,9 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 			if method=='beam':
 				if isinstance(model, nn.DataParallel):
 					# gives list of sentences itself
-					output = model.module.translate_batch(data, act_vecs, beam_size, batch_size_curr)
+					output = model.module.translate_batch(data, act_vecs, beam_size, batch_size_curr, utt_indices)
 				else:
-					output = model.translate_batch(data, act_vecs, beam_size , batch_size_curr) 
+					output = model.translate_batch(data, act_vecs, beam_size , batch_size_curr, utt_indices)
 			elif method=='greedy':
 				if isinstance(model, nn.DataParallel):
 					output, output_max = model.module.greedy_search(data,act_vecs,  batch_size_curr, utt_indices) # .module. if using dataparallel
@@ -412,11 +412,11 @@ def test_split(split, model, args, criterion):
 	# greedy
 	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'greedy')
 	# beam 2
-	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 2)
+	# evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 2)
 	# beam 3
-	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 3)
+	# evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 3)
 	# beam 5
-	evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 5)
+	# evaluate(model, args, data, dataset_counter, dataset_act_vecs, args.batch_size, criterion, split, 'beam', 5)
 	
 
 

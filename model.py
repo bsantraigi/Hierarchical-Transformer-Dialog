@@ -978,13 +978,10 @@ class HIERTransformer_acts(Transformer_acts):
         # adopted from HDSA_Dialog
         device = src.device
 
-        max_sent_len = 50
-        max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
+        max_sent_len = 70
+        # max_dial_len = src.reshape(max_sent_len, -1, batch_size).shape[1]
 
-        src = src.transpose(0, 1)  # src shape changed to (bs*mdl, msl)
-        act_vecs = act_vecs.transpose(0, 1)  # act_vecs changed to bs,44
-
-        def collate_active_info(src, act_vecs, inst_idx_to_position_map, active_inst_idx_map):
+        def collate_active_info(src, act_vecs, utt_indices, inst_idx_to_position_map, active_inst_idx_map):
             # Sentences which are still active are collected,
             # so the decoder will not run on completed sentences.
             n_prev_active_inst = len(inst_idx_to_position_map)
@@ -993,9 +990,10 @@ class HIERTransformer_acts(Transformer_acts):
 
             active_src_seq = collect_active_part(src, active_inst_idx, n_prev_active_inst, n_bm)
             active_act_vecs = collect_active_part(act_vecs, active_inst_idx, n_prev_active_inst, n_bm)
+            active_utt_indices = collect_active_part(utt_indices, active_inst_idx, n_prev_active_inst, n_bm)
 
             active_inst_idx_to_position_map = get_inst_idx_to_tensor_position_map(active_inst_idx_list)
-            return active_src_seq, active_act_vecs, active_inst_idx_to_position_map
+            return active_src_seq, active_act_vecs, active_utt_indices, active_inst_idx_to_position_map
 
         def beam_decode_step(inst_dec_beams, len_dec_seq, active_inst_idx_list, src, act_vecs, inst_idx_to_position_map,
                              n_bm):
@@ -1008,7 +1006,7 @@ class HIERTransformer_acts(Transformer_acts):
             dec_partial_seq = dec_partial_seq.view(-1, len_dec_seq)
 
             # print( src.shape, dec_partial_seq.shape , act_vecs.shape) # src is 50, 150
-            logits = self.forward(src.transpose(0, 1), dec_partial_seq.transpose(0, 1), act_vecs.transpose(0, 1),
+            logits = self.forward(src, dec_partial_seq, act_vecs,
                                   utt_indices)[-1, :, :].unsqueeze(0)  # error here
 
             # print(logits.shape)
@@ -1033,6 +1031,7 @@ class HIERTransformer_acts(Transformer_acts):
 
             src = src.repeat(1, n_bm).reshape(batch_size * n_bm, -1)  # bm*batch_size, msl*mdl
             act_vecs = act_vecs.repeat(1, n_bm).reshape(batch_size * n_bm, -1)
+            utt_indices = utt_indices.repeat(1, n_bm).reshape(batch_size * n_bm, -1)
             # act_vecs -> bs*n_bm, 44
 
             inst_dec_beams = [Beam(n_bm, device=device) for _ in range(batch_size)]
@@ -1044,7 +1043,7 @@ class HIERTransformer_acts(Transformer_acts):
                                                         act_vecs, inst_idx_to_position_map, n_bm)
                 if not active_inst_idx_list:
                     break
-                src, act_vecs, inst_idx_to_position_map = collate_active_info(src, act_vecs, inst_idx_to_position_map,
+                src, act_vecs, utt_indices, inst_idx_to_position_map = collate_active_info(src, act_vecs, utt_indices, inst_idx_to_position_map,
                                                                               active_inst_idx_list)
 
             def collect_hypothesis_and_scores(inst_dec_beams, n_best):
