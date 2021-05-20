@@ -511,18 +511,22 @@ def run(args, optuna_callback=None):
         logger.debug('MODE: Train Model')
         _ = training(model, args, criterion, optimizer, scheduler, optuna_callback)
 
-    best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')  # load model with best criteria
+    if optuna_callback is None:
+        # If it is a optuna run, we cannot load any saved models as multiple
+        # processes may be updating those checkpoints
 
-    method = 'greedy'
-    logger.debug('Testing model {}\n'.format(method))
+        best_val_loss_ground = load_model(model, args.log_path + 'checkpoint_criteria.pt')  # load model with best criteria
 
-    # _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
-    # logger.debug('==>Test\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}'.format(test_bleu, test_f1, test_matches, test_successes))
-    # logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+        method = 'greedy'
+        logger.debug('Testing model {}\n'.format(method))
 
-    # # To get greedy, beam(2,3,5) scores for val, test
-    # test_split('val', model, args, criterion)
-    test_split('test', model, args, criterion)
+        # _,test_bleu ,test_f1 ,test_matches,test_successes = testing(model, args, criterion, 'test', 'greedy')
+        # logger.debug('==>Test\tBleu: {:0.3f}\tF1-Entity {:0.3f}\tInform {:0.3f}\tSuccesses: {:0.3f}'.format(test_bleu, test_f1, test_matches, test_successes))
+        # logger.debug('Test critiera: {}'.format(test_bleu+0.5*(test_matches+test_successes)))
+
+        # # To get greedy, beam(2,3,5) scores for val, test
+        # test_split('val', model, args, criterion)
+        test_split('test', model, args, criterion)
 
     _, val_bleu, _, val_matches, val_successes = testing(model, args, criterion, 'val', 'greedy')
     return val_bleu + 0.5 * (val_matches + val_successes)

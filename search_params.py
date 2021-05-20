@@ -35,10 +35,10 @@ parser = argparse.ArgumentParser()
 # parser.add_argument("-l_d", "--nlayers_d", default=3, type=int,  help = "Give number of layers for Decoder")
 
 # parser.add_argument("-d", "--dropout",default=0.2, type=float, help = "Give dropout") # 
-parser.add_argument("-bs", "--batch_size", default=8, type=int, help = "Give batch size") #
-parser.add_argument("-e", "--epochs", default=3, type=int, help = "Give number of epochs") #
-parser.add_argument("-model", "--model_type", default="SET", help="Give model name one of [SET, HIER, MAT]")
-parser.add_argument("-ctmask", "--ct_mask_type", default="cls", help="Give ct-mask name one of [hier, cls, full]")
+parser.add_argument("-bs", "--batch_size", default=64, type=int, help = "Give batch size") #
+parser.add_argument("-e", "--epochs", default=8, type=int, help = "Give number of epochs") #
+parser.add_argument("-model", "--model_type", default="HIER", help="Give model name one of [SET, HIER, MAT]")
+# parser.add_argument("-ctmask", "--ct_mask_type", default="cls", help="Give ct-mask name one of [hier, cls, full]")
 
 args = parser.parse_args()
 
@@ -51,18 +51,18 @@ class ARGS:
 def define_args(main_args, trial):
     # We optimize the number of layers, hidden untis and dropout ratio in each layer.
     args2 = {
-#         'embedding_size': trial.suggest_int("embedding_size", 50, 400),        
         'nhead': trial.suggest_int("nhead", 2, 8),
-        'embedding_perhead': trial.suggest_int("embedding_perhead", 25, 40),
-        'nhid_perhead': trial.suggest_int("nhid_perhead", 10, 40),
-#         'nhid': trial.suggest_int("nhid", 50, 400),
+        'embedding_perhead': trial.suggest_int("embedding_perhead", 32, 64),
+        'nhid_perhead': trial.suggest_int("nhid_perhead", 32, 64),
         'nlayers_e1': trial.suggest_int("nlayers_e1", 2, 6),
         'nlayers_e2': trial.suggest_int("nlayers_e2", 2, 6),
         'nlayers_d': trial.suggest_int("nlayers_d", 2, 6),
         'dropout': trial.suggest_float("dropout", 0.05, 0.6),
         'batch_size': main_args.batch_size,
         'epochs': main_args.epochs,
-        'model_type': main_args.model_type
+        'model_type': main_args.model_type,
+        'ct_mask_type': trial.suggest_categorical("ctmask", ["hier", "cls", "full"]),
+        'eval_only': main_args.eval_only
     }
     
     # following need to be divisible by nhead
@@ -80,16 +80,6 @@ def objective(main_args, trial):
     # Generate the model.
     args = define_args(main_args, trial)
 
-    # Generate the optimizers.
-    #optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
-    #lr = trial.suggest_float("lr", 1e-5, 1e-1, log=True)
-    #optimizer = getattr(optim, optimizer_name)(model.parameters(), lr=lr)
-
-    # Get the dataset.
-    #train_loader, valid_loader = get_mnist()
-
-    # Training of the model
-    
     def callback(epoch, val_accuracy): # NewMethod
         trial.report(val_accuracy, epoch)
 
