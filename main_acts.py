@@ -200,14 +200,14 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 			json.dump(evaluate_dials, f)
 
 		# ============= NEW EVAL ===============
-			logger.debug('NEW EVAL')
-			model_folder = args.log_path
-			mode = split
-			# for x in ['greedy', 'beam_2', 'beam_3', 'beam_5']:
-			NEval.budzianowski_eval(model_folder, mode, method)
+		logger.debug('NEW EVAL')
+		model_folder = args.log_path
+		mode = split
+		# for x in ['greedy', 'beam_2', 'beam_3', 'beam_5']:
+		matches, successes = NEval.budzianowski_eval(model_folder, mode, method)
 		# ======================================
 		
-		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
+		# matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
 		
 		data, _, _ = name_to_dataset(split)
 		

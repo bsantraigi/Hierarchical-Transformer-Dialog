@@ -21,11 +21,12 @@ def budzianowski_eval(model_folder, mode, x):
         # for key, value in human_raw_data.items():
         #     human_proc_data[key] = value['sys'] # Array of system utterances
 
-        _, _, _, all_match_success = evaluator.evaluateModel(generated_data, mode=mode)
+        _, successes, matches, all_match_success = evaluator.evaluateModel(generated_data, mode=mode)
 
         # Match and Success stats
         pred_file = prediction_json.replace("model_turns", "stats").replace("json", "tsv")
         all_match_success = pd.DataFrame.from_records(all_match_success)
         all_match_success.to_csv(pred_file, sep="\t", index=False)
+        return matches, successes
     else:
         print("skip", x.upper(), '\n')
