@@ -28,6 +28,6 @@ def budzianowski_eval(model_folder, mode, x):
         pred_file = prediction_json.replace("model_turns", "stats").replace("json", "tsv")
         all_match_success = pd.DataFrame.from_records(all_match_success)
         all_match_success.to_csv(pred_file, sep="\t", index=False)
-        return matches, successes
+        return 100*matches, 100*successes
     else:
         print("skip", x.upper(), '\n')
