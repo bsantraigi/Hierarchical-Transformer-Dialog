@@ -6,12 +6,14 @@
 import json
 import os
 
+import new_eval as NEval
+
 if __name__ == "__main__":
     # Test run
 
     # ## Evaluating model predictions
-    model_folder = "../running/transformer_hier/"
+    model_folder = "running/transformer_hier++/"
     mode = "test"
     # for x in ['greedy', 'beam_2', 'beam_3', 'beam_5']:
     x = "greedy"
-    budzianowski_eval(model_folder, mode, x)
+    NEval.budzianowski_eval(model_folder, mode, x)

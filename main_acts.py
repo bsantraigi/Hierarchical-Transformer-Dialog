@@ -25,6 +25,7 @@ from collections import OrderedDict
 from evaluate import evaluateModel
 import Constants
 import argparse
+import new_eval as NEval
 
 if not os.path.isdir('running'):
 	os.makedirs('running')
@@ -197,6 +198,14 @@ def evaluate(model, args, dataset, dataset_counter, dataset_act_vecs, batch_size
 			model_turns_file = args.log_path+'model_turns_greedy_'+split+'.json'
 		with open(model_turns_file, 'w') as f:
 			json.dump(evaluate_dials, f)
+
+		# ============= NEW EVAL ===============
+			logger.debug('NEW EVAL')
+			model_folder = args.log_path
+			mode = split
+			# for x in ['greedy', 'beam_2', 'beam_3', 'beam_5']:
+			NEval.budzianowski_eval(model_folder, mode, method)
+		# ======================================
 		
 		matches, successes = evaluateModel(evaluate_dials) # gives matches(inform), success
 		

@@ -103,7 +103,7 @@ def prepareSlotValuesIndependent():
             dic.append((normalize('Parkside Police Station'), '[' + domain + '_' + 'name' + ']'))
 
     # add at the end places from trains
-    fin = open('db/' + 'train' + '_db.json')
+    fin = open('new_eval/db/' + 'train' + '_db.json')
     db_json = json.load(fin)
     fin.close()
 

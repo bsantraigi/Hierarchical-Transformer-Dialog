@@ -1,15 +1,15 @@
 import math
-import utils.delexicalize as delex
 from collections import Counter
 from nltk.util import ngrams
 import json
-from utils.nlp import normalize
 import sqlite3
 import os
 import random
 import logging
-from utils.nlp import BLEUScorer
 
+from .eval_utils import delexicalize as delex
+from .eval_utils.nlp import normalize
+from .eval_utils.nlp import BLEUScorer
 
 class BaseEvaluator(object):
     def initialize(self):
@@ -108,7 +108,7 @@ class MultiWozDB(object):
     CUR_DIR = os.path.dirname(__file__)
 
     for domain in domains:
-        db = os.path.join('db/{}-dbase.db'.format(domain))
+        db = os.path.join('new_eval/db/{}-dbase.db'.format(domain))
         conn = sqlite3.connect(db)
         c = conn.cursor()
         dbs[domain] = c
@@ -158,7 +158,7 @@ class MultiWozEvaluator(BaseEvaluator):
     def __init__(self, data_name):
         self.data_name = data_name
         self.slot_dict = delex.prepareSlotValuesIndependent()
-        self.delex_dialogues = json.load(open('data/multi-woz/delex.json'))
+        self.delex_dialogues = json.load(open('new_eval/data/multi-woz/delex.json'))
         self.db = MultiWozDB()
         self.labels = list()
         self.hyps = list()
