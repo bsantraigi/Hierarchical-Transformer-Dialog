@@ -7,7 +7,8 @@ def budzianowski_eval(model_folder, mode, x):
     # with open("./data/test_dials.json", "r") as f:
     #     human_raw_data = json.load(f)
     # HIER
-    prediction_json = "{}/model_turns_{}_test.json".format(model_folder, x)
+    prediction_json = "{}/model_turns_{}_{}.json".format(model_folder, x, mode)
+    print("RCVD Instruction for ", prediction_json)
     if os.path.isfile(prediction_json):
         print("\nDecoding Method:", x.upper(), '\n-------------------')
         with open(prediction_json, "r") as f:
